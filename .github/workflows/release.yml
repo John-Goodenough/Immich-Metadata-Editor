@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - name: Version prüfen
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          CODE="$(python -c 'import dia_assistent; print(dia_assistent.__version__)')"
+          if [ "$TAG" != "$CODE" ]; then
+            echo "Tag v$TAG passt nicht zu __version__ $CODE in dia_assistent/__init__.py" >&2
+            exit 1
+          fi
+      - name: Archiv bauen
+        run: |
+          NAME="dia-assistent-${GITHUB_REF_NAME}"
+          mkdir -p dist
+          git archive --format=tar.gz --prefix="${NAME}/" -o "dist/${NAME}.tar.gz" "${GITHUB_REF_NAME}"
+          (cd dist && sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256")
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          generate_release_notes: true

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dia-Assistent</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header id="top">
+    <div id="progress-text" aria-live="polite"></div>
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+    <button id="skip-image" class="btn btn-quiet" hidden>Dieses Bild später</button>
+  </header>
+
+  <main id="main">
+    <figure id="photo-box" hidden>
+      <img id="photo" alt="Das aktuelle Dia">
+    </figure>
+    <section id="panel">
+      <ol id="steps" hidden>
+        <li data-step="when">Wann?</li>
+        <li data-step="where">Wo?</li>
+        <li data-step="what">Was?</li>
+        <li data-step="who">Wer?</li>
+        <li data-step="done">Fertig</li>
+      </ol>
+      <h1 id="question"></h1>
+      <p id="hint"></p>
+      <div id="content"></div>
+      <div id="error" role="alert" hidden>
+        <p id="error-text"></p>
+        <button id="error-retry" class="btn btn-primary">Noch einmal versuchen</button>
+      </div>
+      <nav id="nav">
+        <button id="back" class="btn">&larr; Zurück</button>
+        <button id="next" class="btn btn-primary">Weiter &rarr;</button>
+      </nav>
+    </section>
+  </main>
+
+  <div id="busy" hidden><div id="busy-text">Einen Moment bitte …</div></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

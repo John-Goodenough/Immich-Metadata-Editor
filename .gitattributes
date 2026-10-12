@@ -1,0 +1,6 @@
+# Nicht ins Release-Archiv
+tests/ export-ignore
+.github/ export-ignore
+requirements-dev.txt export-ignore
+pyproject.toml export-ignore
+*.sh text eol=lf
