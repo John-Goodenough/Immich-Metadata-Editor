@@ -1,0 +1,131 @@
+"""FastAPI-Backend. Hält den API-Key, der Browser spricht nur mit 127.0.0.1."""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi import Path as PathParam
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+from . import __version__
+from .config import Config
+from .geocode import Geocoder
+from .immich import ImmichClient, ImmichError, save_answers
+from .logic import Answers, InvalidInput
+
+STATIC_DIR = Path(__file__).parent / "static"
+UUID = r"^[0-9a-fA-F-]{36}$"
+
+
+class SaveRequest(BaseModel):
+    year: int | None = None
+    month: int | None = None
+    day: int | None = None
+    approximate: bool = False
+    latitude: float | None = None
+    longitude: float | None = None
+    description: str | None = Field(default=None, max_length=5000)
+    person_ids: list[str] = Field(default_factory=list)
+
+
+def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geocoder | None = None) -> FastAPI:
+    immich = immich or ImmichClient(config.immich_url, config.api_key)
+    geocoder = geocoder or Geocoder(config.nominatim_url, config.nominatim_contact)
+    state: dict = {"work_tag_id": None}
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        yield
+        await immich.aclose()
+        await geocoder.aclose()
+
+    app = FastAPI(title="Dia-Assistent", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
+
+    @app.exception_handler(ImmichError)
+    async def immich_error(_: Request, exc: ImmichError):
+        return JSONResponse({"fehler": str(exc)}, status_code=502)
+
+    @app.exception_handler(InvalidInput)
+    async def invalid_input(_: Request, exc: InvalidInput):
+        return JSONResponse({"fehler": str(exc)}, status_code=400)
+
+    @app.exception_handler(Exception)
+    async def unexpected(_: Request, exc: Exception):
+        return JSONResponse({"fehler": "Da ist etwas schiefgegangen. Bitte noch einmal versuchen."}, status_code=500)
+
+    async def work_tag_id() -> str:
+        if not state["work_tag_id"]:
+            tag_id = await immich.find_tag_id(config.tag_name)
+            if not tag_id:
+                raise ImmichError(f"Die Markierung „{config.tag_name}“ gibt es in Immich nicht.")
+            state["work_tag_id"] = tag_id
+        return state["work_tag_id"]
+
+    @app.get("/")
+    async def index():
+        return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/settings")
+    async def settings():
+        return {"yearFrom": config.year_from, "yearTo": config.year_to, "version": __version__}
+
+    @app.get("/api/queue")
+    async def queue():
+        return {"ids": await immich.asset_ids_with_tag(await work_tag_id())}
+
+    @app.get("/api/assets/{asset_id}")
+    async def asset(asset_id: str = PathParam(pattern=UUID)):
+        data = await immich.get_asset(asset_id)
+        exif = data.get("exifInfo") or {}
+        return {
+            "id": data["id"],
+            "description": exif.get("description") or "",
+            "city": exif.get("city"),
+            "country": exif.get("country"),
+            "personIds": [p["id"] for p in data.get("people") or []],
+        }
+
+    @app.get("/api/assets/{asset_id}/preview")
+    async def preview(asset_id: str = PathParam(pattern=UUID)):
+        upstream = await immich.preview(asset_id)
+        return Response(
+            upstream.content,
+            media_type=upstream.headers.get("content-type", "image/jpeg"),
+            headers={"Cache-Control": "private, max-age=3600"},
+        )
+
+    @app.get("/api/people")
+    async def people():
+        return [{"id": p["id"], "name": p["name"]} for p in await immich.people()]
+
+    @app.get("/api/people/{person_id}/thumbnail")
+    async def person_thumbnail(person_id: str = PathParam(pattern=UUID)):
+        upstream = await immich.person_thumbnail(person_id)
+        return Response(
+            upstream.content,
+            media_type=upstream.headers.get("content-type", "image/jpeg"),
+            headers={"Cache-Control": "private, max-age=86400"},
+        )
+
+    @app.get("/api/places")
+    async def places(q: str = ""):
+        return await geocoder.search(q[:200])
+
+    @app.post("/api/assets/{asset_id}/save")
+    async def save(body: SaveRequest, asset_id: str = PathParam(pattern=UUID)):
+        await save_answers(
+            immich,
+            asset_id,
+            Answers(**body.model_dump()),
+            work_tag_id=await work_tag_id(),
+            approx_tag_name=config.approx_tag_name,
+            tz=config.timezone,
+        )
+        return {"ok": True}
+
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    return app

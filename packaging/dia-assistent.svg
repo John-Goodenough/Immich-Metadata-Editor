@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="6" y="6" width="52" height="52" rx="4" fill="#f3f4f6" stroke="#111" stroke-width="3"/>
+  <rect x="15" y="15" width="34" height="28" fill="#0b4f9c"/>
+  <path d="M15 43 L27 29 L35 37 L41 31 L49 43 Z" fill="#136f2b"/>
+  <circle cx="41" cy="22" r="4" fill="#fff3b0"/>
+  <text x="32" y="54" font-family="sans-serif" font-size="8" font-weight="bold" text-anchor="middle" fill="#111">DIA</text>
+</svg>

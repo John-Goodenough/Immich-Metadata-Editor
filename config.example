@@ -1,0 +1,30 @@
+# Einstellungen für den Dia-Assistenten.
+# Kopieren nach ".env" (im selben Ordner) und ausfüllen. ".env" wird nicht ins Git eingecheckt.
+
+# Adresse der Immich-Instanz, ohne /api am Ende
+IMMICH_URL=https://immich.example.de
+
+# API-Schlüssel (Immich: Kontoeinstellungen -> API-Schlüssel). Benötigte Rechte siehe README.
+IMMICH_API_KEY=
+
+# Tag, mit dem die zu bearbeitenden Bilder markiert sind
+TAG_NAME=Dia-Nachpflege
+
+# Tag für Bilder, deren Datum nur ungefähr bekannt ist (wird bei Bedarf angelegt)
+APPROX_TAG_NAME=Datum-ungefähr
+
+# Zeitzone für das eingetragene Datum (Uhrzeit wird auf 12:00 gesetzt)
+TIMEZONE=Europe/Berlin
+
+# Jahre, die bei "Wann?" zur Auswahl stehen
+YEAR_FROM=1940
+YEAR_TO=2010
+
+# Kontakt-E-Mail für Nominatim (OpenStreetMap-Ortssuche), empfohlen laut Nutzungsrichtlinie
+NOMINATIM_CONTACT=
+
+# Optional: eigene Nominatim-Instanz
+# NOMINATIM_URL=https://nominatim.openstreetmap.org/search
+
+# Port auf 127.0.0.1
+PORT=8765
