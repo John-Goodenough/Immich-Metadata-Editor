@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from .logic import Answers, InvalidInput, build_asset_update, full_image_face
+from .logic import Answers, InvalidInput, build_asset_update, full_image_face, tags_to_assign
 
 
 class ImmichError(Exception):
@@ -53,9 +53,12 @@ class ImmichClient:
 
     # --- Lesen -----------------------------------------------------------
 
+    async def tags(self) -> list[dict]:
+        return (await self._request("GET", "/tags")).json()
+
     async def find_tag_id(self, name: str) -> str | None:
         """GET /tags. Treffer über vollen Pfad (value) oder Namen."""
-        tags = (await self._request("GET", "/tags")).json()
+        tags = await self.tags()
         for tag in tags:
             if tag.get("value") == name:
                 return tag["id"]
@@ -112,10 +115,10 @@ class ImmichClient:
     async def update_asset(self, asset_id: str, body: dict) -> None:
         await self._request("PUT", f"/assets/{asset_id}", json=body)
 
-    async def ensure_tag(self, name: str) -> str:
-        """PUT /tags (Upsert): legt den Tag an, falls er fehlt."""
-        tags = (await self._request("PUT", "/tags", json={"tags": [name]})).json()
-        return tags[0]["id"]
+    async def ensure_tags(self, values: list[str]) -> dict[str, str]:
+        """PUT /tags (Upsert): legt fehlende Tags samt Elterntags an. Ergebnis: Pfad -> ID."""
+        tags = (await self._request("PUT", "/tags", json={"tags": values})).json()
+        return {tag["value"]: tag["id"] for tag in tags}
 
     async def tag_asset(self, tag_id: str, asset_id: str) -> None:
         await self._bulk("PUT", tag_id, asset_id)
@@ -141,13 +144,15 @@ async def save_answers(
     *,
     work_tag_id: str,
     approx_tag_name: str,
+    done_tag_name: str,
     tz: str,
 ) -> None:
     """Alles speichern und zuletzt den Arbeits-Tag entfernen.
 
     Jeder Schritt ist wiederholbar: Bricht die Verbindung mittendrin ab, kann
     das Speichern einfach erneut ausgelöst werden, ohne Doppelungen zu erzeugen.
-    Der Arbeits-Tag wird nur entfernt, wenn alles vorher geklappt hat.
+    Der Arbeits-Tag wird nur entfernt, wenn alles vorher geklappt hat. Zuvor
+    bekommt das Bild den Erledigt-Tag, damit sich der Fortschritt verfolgen lässt.
     """
     asset = await client.get_asset(asset_id)
     exif = asset.get("exifInfo") or {}
@@ -156,9 +161,12 @@ async def save_answers(
     if body:
         await client.update_asset(asset_id, body)
 
-    if answers.approximate and "dateTimeOriginal" in body:
-        approx_id = await client.ensure_tag(approx_tag_name)
-        await client.tag_asset(approx_id, asset_id)
+    values = tags_to_assign(answers, done_tag_name, approx_tag_name, "dateTimeOriginal" in body)
+    tag_ids = await client.ensure_tags(values)
+    for value in values:
+        if value not in tag_ids:
+            raise ImmichError("Ein Thema konnte nicht angelegt werden.")
+        await client.tag_asset(tag_ids[value], asset_id)
 
     if answers.person_ids:
         width = asset.get("width") or exif.get("exifImageWidth")

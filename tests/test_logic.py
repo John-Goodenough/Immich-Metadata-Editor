@@ -7,6 +7,8 @@ from dia_assistent.logic import (
     build_date,
     full_image_face,
     merge_description,
+    normalize_tag_value,
+    tags_to_assign,
 )
 
 TZ = "Europe/Berlin"
@@ -85,3 +87,18 @@ def test_full_image_face():
         "width": 3000,
         "height": 2000,
     }
+
+
+def test_normalize_tag_value():
+    assert normalize_tag_value(" Urlaub / Italien ") == "Urlaub/Italien"
+    for bad in ("", "  ", "Urlaub//Italien", "/Urlaub", "Urlaub/"):
+        with pytest.raises(InvalidInput):
+            normalize_tag_value(bad)
+
+
+def test_tags_to_assign():
+    a = Answers(approximate=True, tag_values=["Familie", "Familie "])
+    assert tags_to_assign(a, "Dia-bearbeitet", "Datum-ungefähr", date_written=True) == [
+        "Familie", "Datum-ungefähr", "Dia-bearbeitet"]
+    assert tags_to_assign(a, "Dia-bearbeitet", "Datum-ungefähr", date_written=False) == [
+        "Familie", "Dia-bearbeitet"]

@@ -13,6 +13,9 @@ TAG_NAME=Dia-Nachpflege
 # Tag für Bilder, deren Datum nur ungefähr bekannt ist (wird bei Bedarf angelegt)
 APPROX_TAG_NAME=Datum-ungefähr
 
+# Tag für Bilder, die im Assistenten gespeichert wurden (zum Zählen/Filtern, wird bei Bedarf angelegt)
+DONE_TAG_NAME=Dia-bearbeitet
+
 # Zeitzone für das eingetragene Datum (Uhrzeit wird auf 12:00 gesetzt)
 TIMEZONE=Europe/Berlin
 

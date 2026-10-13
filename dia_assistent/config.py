@@ -20,6 +20,7 @@ class Config:
     api_key: str
     tag_name: str = "Dia-Nachpflege"
     approx_tag_name: str = "Datum-ungefähr"
+    done_tag_name: str = "Dia-bearbeitet"
     timezone: str = "Europe/Berlin"
     nominatim_contact: str = ""
     nominatim_url: str = "https://nominatim.openstreetmap.org/search"
@@ -66,6 +67,7 @@ def load_config(path: Path | None = None) -> Config:
         api_key=key,
         tag_name=values.get("TAG_NAME") or Config.tag_name,
         approx_tag_name=values.get("APPROX_TAG_NAME") or Config.approx_tag_name,
+        done_tag_name=values.get("DONE_TAG_NAME") or Config.done_tag_name,
         timezone=values.get("TIMEZONE") or Config.timezone,
         nominatim_contact=values.get("NOMINATIM_CONTACT", ""),
         nominatim_url=values.get("NOMINATIM_URL") or Config.nominatim_url,
