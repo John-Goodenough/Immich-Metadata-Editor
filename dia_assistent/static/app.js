@@ -83,7 +83,8 @@ async function api(path, options = {}) {
   let data = null;
   try { data = await response.json(); } catch { /* leer */ }
   if (!response.ok) {
-    throw new Error((data && data.fehler) || "Da ist etwas schiefgegangen. Bitte noch einmal versuchen.");
+    // Ohne deutsche Meldung vom Server: allgemeiner Text plus Code, damit sich der Fehler eingrenzen lässt
+    throw new Error((data && data.fehler) || `Da ist etwas schiefgegangen (Code ${response.status}). Bitte noch einmal versuchen.`);
   }
   return data;
 }

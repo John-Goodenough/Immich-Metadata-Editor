@@ -82,6 +82,8 @@ Ein Doppelklick startet den Server und öffnet den Browser. Läuft er schon, öf
 Fehlt die Konfiguration, erscheint eine Fehlermeldung als Fenster (über `zenity`, unter Zorin vorinstalliert).
 
 **Update:** `git pull && ./install.sh` (bzw. neues Release-Archiv entpacken und `.env` mitnehmen).
+Läuft der Assistent dabei noch, ist das kein Problem: Der nächste Doppelklick erkennt den veralteten
+Server am geänderten Programmcode, beendet ihn und startet die neue Version.
 
 ### Bildschirm
 
@@ -203,6 +205,10 @@ Chrome läuft sie über Google-Server. Beides ist für diesen Zweck nicht zuverl
 Alle Meldungen sind deutsch und ohne technische Details („Keine Verbindung zum Server. Ist das Internet da?“).
 Eingaben bleiben bei Fehlern erhalten. Zusätzlich wird das angefangene Bild als Entwurf im Browser
 (`localStorage`) gesichert.
+
+Kommt die allgemeine Meldung „Da ist etwas schiefgegangen (Code …)“, steht die Ursache in
+`dia-assistent.log` im Programmordner (Verbindungsfehler zu Immich, unerwartete Fehler mit Traceback).
+Der API-Schlüssel wird dort nicht protokolliert.
 
 ---
 

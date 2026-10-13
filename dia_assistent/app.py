@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import os
+import signal
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__
+from . import __version__, build_id
 from .config import Config
 from .geocode import Geocoder
 from .immich import ImmichClient, ImmichError, save_answers
@@ -19,6 +23,10 @@ from .logic import Answers, InvalidInput
 
 STATIC_DIR = Path(__file__).parent / "static"
 UUID = r"^[0-9a-fA-F-]{36}$"
+# Eigener Header: Browser schicken ihn von fremden Seiten nicht ohne CORS-Freigabe mit
+CONTROL_HEADER = "x-dia-assistent"
+
+log = logging.getLogger("dia_assistent")
 
 
 class SaveRequest(BaseModel):
@@ -37,6 +45,7 @@ def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geo
     immich = immich or ImmichClient(config.immich_url, config.api_key)
     geocoder = geocoder or Geocoder(config.nominatim_url, config.nominatim_contact)
     state: dict = {"work_tag_id": None}
+    build = build_id()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -47,7 +56,8 @@ def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geo
     app = FastAPI(title="Dia-Assistent", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
 
     @app.exception_handler(ImmichError)
-    async def immich_error(_: Request, exc: ImmichError):
+    async def immich_error(request: Request, exc: ImmichError):
+        log.warning("%s %s: %s (%r)", request.method, request.url.path, exc, exc.__cause__)
         return JSONResponse({"fehler": str(exc)}, status_code=502)
 
     @app.exception_handler(InvalidInput)
@@ -55,7 +65,8 @@ def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geo
         return JSONResponse({"fehler": str(exc)}, status_code=400)
 
     @app.exception_handler(Exception)
-    async def unexpected(_: Request, exc: Exception):
+    async def unexpected(request: Request, exc: Exception):
+        log.error("%s %s: unerwarteter Fehler", request.method, request.url.path, exc_info=exc)
         return JSONResponse({"fehler": "Da ist etwas schiefgegangen. Bitte noch einmal versuchen."}, status_code=500)
 
     async def work_tag_id() -> str:
@@ -72,7 +83,16 @@ def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geo
 
     @app.get("/api/settings")
     async def settings():
-        return {"yearFrom": config.year_from, "yearTo": config.year_to, "version": __version__}
+        return {"yearFrom": config.year_from, "yearTo": config.year_to, "version": __version__, "build": build}
+
+    @app.post("/api/quit")
+    async def quit_server(request: Request):
+        """Vom Starter benutzt, um einen veralteten Server zu beenden."""
+        if request.headers.get(CONTROL_HEADER) != "1":
+            return JSONResponse({"fehler": "Nicht erlaubt."}, status_code=403)
+        log.info("Beenden angefordert")
+        asyncio.get_running_loop().call_later(0.2, os.kill, os.getpid(), signal.SIGTERM)
+        return {"ok": True}
 
     hidden_tags = {config.tag_name, config.approx_tag_name, config.done_tag_name}
 
