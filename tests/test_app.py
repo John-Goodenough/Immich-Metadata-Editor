@@ -49,6 +49,20 @@ def test_invalid_date_gives_400():
     assert "Tag" in r.json()["fehler"]
 
 
+@respx.mock
+def test_tag_list_hides_technical_tags():
+    respx.get(f"{API}/tags").respond(json=[
+        {"id": "1", "name": "Dia-Nachpflege", "value": "Dia-Nachpflege"},
+        {"id": "2", "name": "Dia-bearbeitet", "value": "Dia-bearbeitet"},
+        {"id": "3", "name": "Datum-ungefähr", "value": "Datum-ungefähr"},
+        {"id": "4", "name": "urlaub", "value": "urlaub"},
+        {"id": "5", "name": "Italien", "value": "urlaub/Italien"},
+        {"id": "6", "name": "Familie", "value": "Familie"},
+    ])
+    with make_client() as c:
+        assert c.get("/api/tags").json() == ["Familie", "urlaub", "urlaub/Italien"]
+
+
 def test_rejects_bad_ids():
     with make_client() as c:
         assert c.get("/api/assets/..%2Fadmin").status_code in (404, 422)

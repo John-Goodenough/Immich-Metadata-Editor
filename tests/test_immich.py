@@ -75,19 +75,32 @@ async def test_people_only_named_and_visible(mock, client):
     assert [p["name"] for p in await client.people()] == ["anton", "Oma"]
 
 
+DONE_TAG = "66666666-6666-4666-8666-666666666666"
+HOLIDAY_TAG = "77777777-7777-4777-8777-777777777777"
+SAVE = {"work_tag_id": WORK_TAG, "approx_tag_name": "Datum-ungefähr", "done_tag_name": "Dia-bearbeitet",
+        "tz": "Europe/Berlin"}
+
+
+def upsert_echo(request):
+    ids = {"Datum-ungefähr": APPROX_TAG, "Dia-bearbeitet": DONE_TAG, "Urlaub/Italien": HOLIDAY_TAG}
+    return httpx.Response(200, json=[{"id": ids[v], "value": v} for v in json.loads(request.content)["tags"]])
+
+
 async def test_save_everything(mock, client):
     mock.get(f"/assets/{ASSET}").respond(json=asset(description="Kiste 3"))
     put = mock.put(f"/assets/{ASSET}").respond(json={})
-    upsert = mock.put("/tags").respond(json=[{"id": APPROX_TAG}])
-    tag = mock.put(f"/tags/{APPROX_TAG}/assets").respond(json=[{"id": ASSET, "success": True}])
+    upsert = mock.put("/tags").mock(side_effect=upsert_echo)
+    tagged = []
+    for tag_id in (APPROX_TAG, DONE_TAG, HOLIDAY_TAG):
+        tagged.append(mock.put(f"/tags/{tag_id}/assets").respond(json=[{"id": ASSET, "success": True}]))
     mock.get("/faces", params={"id": ASSET}).respond(json=[{"person": {"id": PERSON_A}}, {"person": None}])
     faces = mock.post("/faces").respond(201)
     untag = mock.delete(f"/tags/{WORK_TAG}/assets").respond(json=[{"id": ASSET, "success": True}])
 
     answers = Answers(year=1965, month=8, approximate=True, latitude=49.98, longitude=7.92,
-                      description="Weinlese", person_ids=[PERSON_A, PERSON_B, PERSON_B])
-    await save_answers(client, ASSET, answers, work_tag_id=WORK_TAG, approx_tag_name="Datum-ungefähr",
-                       tz="Europe/Berlin")
+                      description="Weinlese", person_ids=[PERSON_A, PERSON_B, PERSON_B],
+                      tag_values=[" Urlaub / Italien ", "Urlaub/Italien"])
+    await save_answers(client, ASSET, answers, **SAVE)
 
     assert body(put.calls.last) == {
         "dateTimeOriginal": "1965-08-15T12:00:00.000+01:00",
@@ -95,8 +108,10 @@ async def test_save_everything(mock, client):
         "longitude": 7.92,
         "description": "Kiste 3\n\nWeinlese",
     }
-    assert body(upsert.calls.last) == {"tags": ["Datum-ungefähr"]}
-    assert body(tag.calls.last) == {"ids": [ASSET]}
+    # ein Upsert für alles, neue Themen werden dabei samt Elternthema angelegt
+    assert body(upsert.calls.last) == {"tags": ["Urlaub/Italien", "Datum-ungefähr", "Dia-bearbeitet"]}
+    for route in tagged:
+        assert body(route.calls.last) == {"ids": [ASSET]}
     # Person A ist schon drauf, B nur einmal
     assert faces.call_count == 1
     assert body(faces.calls.last) == {"assetId": ASSET, "personId": PERSON_B, "imageWidth": 4000,
@@ -104,16 +119,18 @@ async def test_save_everything(mock, client):
     assert body(untag.calls.last) == {"ids": [ASSET]}
 
 
-async def test_save_nothing_only_removes_tag(mock, client):
+async def test_save_nothing_sets_done_tag_and_removes_work_tag(mock, client):
     mock.get(f"/assets/{ASSET}").respond(json=asset())
     put = mock.put(f"/assets/{ASSET}")
-    upsert = mock.put("/tags")
+    upsert = mock.put("/tags").mock(side_effect=upsert_echo)
+    done = mock.put(f"/tags/{DONE_TAG}/assets").respond(json=[{"id": ASSET, "success": True}])
     faces = mock.post("/faces")
     untag = mock.delete(f"/tags/{WORK_TAG}/assets").respond(json=[{"id": ASSET, "success": True}])
-    await save_answers(client, ASSET, Answers(approximate=True), work_tag_id=WORK_TAG,
-                       approx_tag_name="Datum-ungefähr", tz="Europe/Berlin")
-    assert not put.called and not upsert.called and not faces.called
-    assert untag.called
+    # "ungefähr" ohne Datum setzt keinen Ungefähr-Tag
+    await save_answers(client, ASSET, Answers(approximate=True), **SAVE)
+    assert not put.called and not faces.called
+    assert body(upsert.calls.last) == {"tags": ["Dia-bearbeitet"]}
+    assert done.called and untag.called
 
 
 async def test_failure_keeps_work_tag(mock, client):
@@ -121,17 +138,27 @@ async def test_failure_keeps_work_tag(mock, client):
     mock.put(f"/assets/{ASSET}").mock(side_effect=httpx.ConnectError("weg"))
     untag = mock.delete(f"/tags/{WORK_TAG}/assets")
     with pytest.raises(ImmichError, match="Keine Verbindung"):
-        await save_answers(client, ASSET, Answers(year=1970), work_tag_id=WORK_TAG,
-                           approx_tag_name="x", tz="Europe/Berlin")
+        await save_answers(client, ASSET, Answers(year=1970), **SAVE)
+    assert not untag.called
+
+
+async def test_tagging_failure_keeps_work_tag(mock, client):
+    mock.get(f"/assets/{ASSET}").respond(json=asset())
+    mock.put("/tags").mock(side_effect=upsert_echo)
+    mock.put(f"/tags/{DONE_TAG}/assets").respond(json=[{"id": ASSET, "success": False, "error": "no_permission"}])
+    untag = mock.delete(f"/tags/{WORK_TAG}/assets")
+    with pytest.raises(ImmichError):
+        await save_answers(client, ASSET, Answers(), **SAVE)
     assert not untag.called
 
 
 async def test_retry_after_partial_save_is_idempotent(mock, client):
     mock.get(f"/assets/{ASSET}").respond(json=asset(description="Weinlese"))
     put = mock.put(f"/assets/{ASSET}").respond(json={})
+    mock.put("/tags").mock(side_effect=upsert_echo)
+    mock.put(f"/tags/{DONE_TAG}/assets").respond(json=[{"id": ASSET, "success": False, "error": "duplicate"}])
     mock.delete(f"/tags/{WORK_TAG}/assets").respond(json=[{"id": ASSET, "success": False, "error": "not_found"}])
-    await save_answers(client, ASSET, Answers(description="Weinlese"), work_tag_id=WORK_TAG,
-                       approx_tag_name="x", tz="Europe/Berlin")
+    await save_answers(client, ASSET, Answers(description="Weinlese"), **SAVE)
     assert not put.called
 
 

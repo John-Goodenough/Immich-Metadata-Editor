@@ -24,6 +24,7 @@ class Answers:
     longitude: float | None = None
     description: str | None = None
     person_ids: list[str] = field(default_factory=list)
+    tag_values: list[str] = field(default_factory=list)
 
 
 def build_date(year: int | None, month: int | None, day: int | None, tz: str) -> str | None:
@@ -85,6 +86,25 @@ def build_asset_update(answers: Answers, existing_description: str | None, tz: s
     if description is not None:
         body["description"] = description
     return body
+
+
+def normalize_tag_value(value: str) -> str:
+    """Tag-Pfad wie "Urlaub/Italien" säubern. Leere Teile sind nicht erlaubt."""
+    parts = [part.strip() for part in value.split("/")]
+    if not value.strip() or any(not part for part in parts):
+        raise InvalidInput("Ein Thema hat keinen Namen.")
+    if any(len(part) > 100 for part in parts):
+        raise InvalidInput("Ein Thema hat einen zu langen Namen.")
+    return "/".join(parts)
+
+
+def tags_to_assign(answers: Answers, done_tag: str, approx_tag: str, date_written: bool) -> list[str]:
+    """Alle Tag-Pfade, die das Bild beim Speichern bekommt (ohne Doppelte)."""
+    values = [normalize_tag_value(v) for v in answers.tag_values]
+    if answers.approximate and date_written:
+        values.append(approx_tag)
+    values.append(done_tag)
+    return list(dict.fromkeys(values))
 
 
 def full_image_face(asset_id: str, person_id: str, width: int, height: int) -> dict:

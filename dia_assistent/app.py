@@ -30,6 +30,7 @@ class SaveRequest(BaseModel):
     longitude: float | None = None
     description: str | None = Field(default=None, max_length=5000)
     person_ids: list[str] = Field(default_factory=list)
+    tag_values: list[str] = Field(default_factory=list, max_length=100)
 
 
 def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geocoder | None = None) -> FastAPI:
@@ -73,6 +74,15 @@ def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geo
     async def settings():
         return {"yearFrom": config.year_from, "yearTo": config.year_to, "version": __version__}
 
+    hidden_tags = {config.tag_name, config.approx_tag_name, config.done_tag_name}
+
+    def visible(tag: dict) -> bool:
+        return tag["value"] not in hidden_tags and tag["name"] not in hidden_tags
+
+    @app.get("/api/tags")
+    async def tags():
+        return sorted((t["value"] for t in await immich.tags() if visible(t)), key=str.casefold)
+
     @app.get("/api/queue")
     async def queue():
         return {"ids": await immich.asset_ids_with_tag(await work_tag_id())}
@@ -87,6 +97,7 @@ def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geo
             "city": exif.get("city"),
             "country": exif.get("country"),
             "personIds": [p["id"] for p in data.get("people") or []],
+            "tagValues": [t["value"] for t in data.get("tags") or [] if visible(t)],
         }
 
     @app.get("/api/assets/{asset_id}/preview")
@@ -123,6 +134,7 @@ def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geo
             Answers(**body.model_dump()),
             work_tag_id=await work_tag_id(),
             approx_tag_name=config.approx_tag_name,
+            done_tag_name=config.done_tag_name,
             tz=config.timezone,
         )
         return {"ok": True}

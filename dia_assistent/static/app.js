@@ -6,9 +6,10 @@ const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
   "August", "September", "Oktober", "November", "Dezember"];
 const STEP_OF = {
   decade: "when", year: "when", month: "when", day: "when", certainty: "when",
-  place: "where", what: "what", who: "who", summary: "done",
+  place: "where", what: "what", who: "who", tags: "tags", newtag: "tags", summary: "done",
 };
 const PEOPLE_PER_PAGE = 6;
+const TAGS_PER_PAGE = 6;
 const DRAFT_KEY = "dia-assistent-entwurf";
 
 const $ = (id) => document.getElementById(id);
@@ -28,6 +29,10 @@ const state = {
   placeResults: [],
   peoplePage: 0,
   peopleFilter: "",
+  tags: null,
+  tagPath: [],
+  tagPage: 0,
+  keyboard: false,
   retry: null,
 };
 
@@ -35,7 +40,7 @@ function freshAnswers() {
   return {
     year: null, month: null, day: null, approximate: false,
     latitude: null, longitude: null, placeName: null,
-    description: "", person_ids: [],
+    description: "", person_ids: [], tag_values: [],
   };
 }
 
@@ -54,6 +59,10 @@ function el(tag, attrs = {}, ...children) {
     node.append(child instanceof Node ? child : document.createTextNode(String(child)));
   }
   return node;
+}
+
+function images(n) {
+  return n === 1 ? "1 Bild" : `${n} Bilder`;
 }
 
 function decadeName(d) {
@@ -139,7 +148,7 @@ function frame({ question, hint = "", back = true, next = null, nextLabel = "Wei
   $("next").className = nextLabel.startsWith("Speichern") ? "btn btn-good" : "btn btn-primary";
 
   const step = STEP_OF[state.screen];
-  const order = ["when", "where", "what", "who", "done"];
+  const order = ["when", "where", "what", "who", "tags", "done"];
   for (const li of $("steps").children) {
     const pos = order.indexOf(li.dataset.step);
     li.className = li.dataset.step === step ? "current" : pos < order.indexOf(step) ? "done" : "";
@@ -171,7 +180,10 @@ function back() {
 function render() {
   saveDraft();
   SCREENS[state.screen]();
-  const first = $("content").querySelector("input, textarea, .btn.selected, .btn");
+  // Textfelder bekommen immer den Fokus, Knöpfe nur bei Tastaturbedienung:
+  // ein sichtbarer Fokusrahmen ohne Tastatur würde wie eine Auswahl aussehen.
+  const field = $("content").querySelector("input, textarea");
+  const first = field || (state.keyboard && $("content").querySelector(".btn.selected, .btn"));
   if (first) first.focus({ preventScroll: true });
 }
 
@@ -269,7 +281,7 @@ const SCREENS = {
         showError(err.message, search);
       }
     };
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
     c.append(el("div", { class: "row" }, input, button("Suchen", search, "btn-primary")));
     if (a.placeName) {
       c.append(el("div", { class: "chosen" }, `Gewählt: ${a.placeName} `,
@@ -305,7 +317,7 @@ const SCREENS = {
     const c = frame({
       question: "Wer ist auf dem Foto?",
       hint: "Alle antippen, die zu sehen sind.",
-      next: () => go("summary"),
+      next: () => go("tags"),
     });
     if (state.people === null) {
       c.append(el("p", {}, "Personen werden geladen …"));
@@ -383,9 +395,142 @@ const SCREENS = {
       el("dt", {}, "Wo:"), el("dd", {}, a.placeName || "nicht angegeben"),
       el("dt", {}, "Was:"), el("dd", {}, a.description.trim() || "nicht angegeben"),
       el("dt", {}, "Wer:"), el("dd", {}, names.length ? names.join(", ") : "nicht angegeben"),
+      el("dt", {}, "Themen:"), el("dd", {}, a.tag_values.length ? a.tag_values.map(tagLabel).join(", ") : "nicht angegeben"),
     ));
   },
+
+  async tags() {
+    const a = state.answers;
+    const c = frame({
+      question: "Zu welchen Themen passt das Foto?",
+      hint: "Antippen zum Auswählen. „›“ zeigt Unterthemen.",
+      next: () => go("summary"),
+    });
+    if (state.tags === null) {
+      c.append(el("p", {}, "Themen werden geladen …"));
+      try {
+        state.tags = await api("/api/tags");
+      } catch (err) {
+        c.replaceChildren();
+        showError(err.message, () => render());
+        return;
+      }
+      if (state.screen !== "tags") return;
+      c.replaceChildren();
+    }
+
+    const path = state.tagPath;
+    const prefix = path.length ? `${path.join("/")}/` : "";
+    const children = tagChildren(prefix);
+    const pages = Math.max(1, Math.ceil(children.length / TAGS_PER_PAGE));
+    state.tagPage = Math.min(state.tagPage, pages - 1);
+
+    // Brotkrumen: Alle Themen › Urlaub › Italien
+    const crumbs = el("div", { class: "crumbs" });
+    const crumb = (label, depth) => {
+      if (depth === path.length) return el("span", { class: "crumb-here" }, label);
+      return button(label, () => { state.tagPath = path.slice(0, depth); state.tagPage = 0; render(); }, "btn-quiet");
+    };
+    crumbs.append(crumb("Alle Themen", 0));
+    path.forEach((part, i) => crumbs.append(el("span", { class: "crumb-sep" }, "›"), crumb(part, i + 1)));
+
+    const list = el("div", { class: "tag-list" });
+    if (!children.length) {
+      list.append(el("p", {}, path.length ? "Hier gibt es noch keine Unterthemen." : "Es gibt noch keine Themen."));
+    }
+    for (const child of children.slice(state.tagPage * TAGS_PER_PAGE, (state.tagPage + 1) * TAGS_PER_PAGE)) {
+      const value = prefix + child.name;
+      const already = state.asset.tagValues.includes(value);
+      const chosen = already || a.tag_values.includes(value);
+      const toggle = el("button", {
+        type: "button",
+        class: `btn tag-toggle${chosen ? " selected" : ""}`,
+        "aria-pressed": String(chosen),
+        disabled: already,
+        title: already ? "Ist schon zugeordnet" : child.name,
+      }, el("span", {}, child.name));
+      toggle.addEventListener("click", () => {
+        const i = a.tag_values.indexOf(value);
+        if (i >= 0) a.tag_values.splice(i, 1); else a.tag_values.push(value);
+        render();
+      });
+      const open = el("button", {
+        type: "button",
+        class: `btn tag-open${child.count ? "" : " empty"}`,
+        "aria-label": `Unterthemen von ${child.name}`,
+        title: `Unterthemen von ${child.name}`,
+      }, child.count ? `${child.count} ›` : "›");
+      open.addEventListener("click", () => { state.tagPath = [...path, child.name]; state.tagPage = 0; render(); });
+      list.append(el("div", { class: "tag-item" }, toggle, open));
+    }
+
+    const bottom = el("div", { class: "row tag-bottom" });
+    if (pages > 1) {
+      const prev = button("←", () => { state.tagPage--; render(); }, "btn-quiet");
+      const nextPage = button("→", () => { state.tagPage++; render(); }, "btn-quiet");
+      prev.disabled = state.tagPage === 0;
+      nextPage.disabled = state.tagPage >= pages - 1;
+      prev.setAttribute("aria-label", "Vorherige Seite");
+      nextPage.setAttribute("aria-label", "Nächste Seite");
+      bottom.append(prev, el("span", { class: "page-info" }, `${state.tagPage + 1}/${pages}`), nextPage);
+    }
+    bottom.append(button(path.length ? "+ Neues Unterthema" : "+ Neues Thema", () => go("newtag"), "btn-quiet btn-new"));
+
+    c.append(crumbs, list, bottom);
+  },
+
+  newtag() {
+    const path = state.tagPath;
+    const c = frame({
+      question: path.length ? "Neues Unterthema anlegen" : "Neues Thema anlegen",
+      hint: path.length ? `Kommt unter: ${path.join(" › ")}` : "Wird ein Hauptthema.",
+    });
+    const input = el("input", { type: "text", id: "newtag-input", placeholder: "z. B. Weihnachten", maxlength: "100", autocomplete: "off" });
+    const create = () => {
+      const name = input.value.replace(/\//g, "-").trim();
+      if (!name) {
+        showError("Bitte einen Namen eintippen.");
+        return;
+      }
+      const value = path.length ? `${path.join("/")}/${name}` : name;
+      if (!state.answers.tag_values.includes(value) && !state.asset.tagValues.includes(value)) {
+        state.answers.tag_values.push(value);
+      }
+      back();
+    };
+    // preventDefault: sonst löst Enter nach dem Seitenwechsel den neu fokussierten Knopf aus
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); create(); } });
+    c.append(
+      el("div", { class: "row" }, input, button("Anlegen", create, "btn-primary")),
+      el("p", {}, "Das neue Thema wird beim Speichern in Immich angelegt und diesem Foto zugeordnet."),
+    );
+  },
 };
+
+// Alle bekannten Themen: aus Immich, schon am Bild, und neu angelegte (noch nicht gespeichert)
+function allTagValues() {
+  return new Set([...(state.tags || []), ...state.asset.tagValues, ...state.answers.tag_values]);
+}
+
+// Direkte Unterthemen unter einem Pfad-Präfix, mit Anzahl ihrer eigenen Unterthemen
+function tagChildren(prefix) {
+  const values = [...allTagValues()];
+  const names = new Map();
+  for (const value of values) {
+    if (!value.startsWith(prefix)) continue;
+    const rest = value.slice(prefix.length).split("/");
+    if (!rest[0]) continue;
+    if (!names.has(rest[0])) names.set(rest[0], new Set());
+    if (rest.length > 1) names.get(rest[0]).add(rest[1]);
+  }
+  return [...names.entries()]
+    .map(([name, kids]) => ({ name, count: kids.size }))
+    .sort((x, y) => x.name.localeCompare(y.name, "de"));
+}
+
+function tagLabel(value) {
+  return value.split("/").join(" › ");
+}
 
 function showPlaceResults(container) {
   const a = state.answers;
@@ -415,7 +560,7 @@ async function saveCurrent() {
       body: JSON.stringify({
         year: a.year, month: a.month, day: a.day, approximate: a.approximate,
         latitude: a.latitude, longitude: a.longitude,
-        description: a.description, person_ids: a.person_ids,
+        description: a.description, person_ids: a.person_ids, tag_values: a.tag_values,
       }),
     });
   } catch (err) {
@@ -459,6 +604,8 @@ async function openImage(draft = null) {
   state.placeResults = [];
   state.peoplePage = 0;
   state.peopleFilter = "";
+  state.tagPath = [];
+  state.tagPage = 0;
   if (draft && draft.id === id) {
     Object.assign(state, { answers: { ...freshAnswers(), ...draft.answers }, screen: draft.screen, history: draft.history, decade: draft.decade });
   } else {
@@ -475,11 +622,21 @@ function finished() {
   $("progress-text").textContent = "Fertig";
   const c = frame({ question: "Geschafft!", photo: false });
   const lines = [];
-  if (state.saved) lines.push(`${state.saved} Bilder gespeichert.`);
-  if (state.skipped) lines.push(`${state.skipped} Bilder für später aufgehoben.`);
+  if (state.saved) lines.push(`${images(state.saved)} gespeichert.`);
+  if (state.skipped) lines.push(`${images(state.skipped)} für später aufgehoben.`);
   if (!lines.length) lines.push("Im Moment gibt es keine Bilder zum Bearbeiten.");
-  c.append(...lines.map((t) => el("p", { class: "big" }, t)),
-    el("p", {}, "Sie können das Fenster jetzt schließen."));
+  c.append(...lines.map((t) => el("p", { class: "big" }, t)));
+  if (state.skipped) {
+    c.append(button("Von vorne anfangen", restart, "btn-primary big"),
+      el("p", {}, "Dann kommen die aufgehobenen Bilder noch einmal."));
+  } else {
+    c.append(el("p", {}, "Sie können das Fenster jetzt schließen."));
+  }
+}
+
+function restart() {
+  Object.assign(state, { queue: [], index: 0, saved: 0, skipped: 0, tags: null, people: null });
+  start();
 }
 
 async function start() {
@@ -504,14 +661,16 @@ async function start() {
 
   const c = frame({ question: "Guten Tag!", photo: false });
   c.append(
-    el("p", { class: "big" }, `Es warten ${state.queue.length} Bilder auf Sie.`),
+    el("p", { class: "big" }, state.queue.length === 1 ? "Es wartet 1 Bild auf Sie." : `Es warten ${state.queue.length} Bilder auf Sie.`),
     el("p", {}, "Zu jedem Bild gibt es ein paar Fragen. Wenn Sie etwas nicht wissen, ist das nicht schlimm – einfach weiter."),
     button("Los geht's", () => openImage(at >= 0 ? draft : null), "btn-primary big"),
   );
-  c.querySelector(".btn").focus();
+  if (state.keyboard) c.querySelector(".btn").focus();
 }
 
 $("back").addEventListener("click", back);
+document.addEventListener("keydown", () => { state.keyboard = true; }, true);
+document.addEventListener("pointerdown", () => { state.keyboard = false; }, true);
 $("skip-image").addEventListener("click", skipImage);
 $("error-retry").addEventListener("click", () => { const r = state.retry; clearError(); if (r) r(); });
 $("photo").addEventListener("error", () => { $("photo").alt = "Das Bild konnte nicht angezeigt werden."; });
