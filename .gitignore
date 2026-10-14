@@ -9,3 +9,6 @@ __pycache__/
 
 # Build
 dist/
+
+# Protokoll
+dia-assistent.log*

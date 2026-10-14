@@ -101,3 +101,15 @@ async def test_geocoder_rate_limit():
         await geo.search("Ort zwei")
         assert time.monotonic() - start >= 1.0
         await geo.aclose()
+
+
+def test_quit_requires_control_header():
+    with make_client() as c:
+        assert c.post("/api/quit").status_code == 403
+
+
+def test_settings_report_build():
+    from dia_assistent import build_id
+
+    with make_client() as c:
+        assert c.get("/api/settings").json()["build"] == build_id()
