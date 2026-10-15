@@ -42,7 +42,8 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
 - Fünf kurze Fragen pro Bild, jede überspringbar:
   **Wann?** · **Wo?** · **Was ist zu sehen?** · **Wer ist darauf?** · **Welche Themen?**
 - Datum auch ungefähr („Irgendwann in den 60ern“, „nur das Jahr“).
-- Ortssuche über OpenStreetMap, Personen als Fotoknöpfe, Themen (Immich-Tags) mit Unterthemen.
+- Ortssuche über OpenStreetMap, Personen als Fotoknöpfe, Themen (Immich-Tags) mit Unterthemen und Suche.
+- Vollbild-Knopf, große farbige Knöpfe, deutlich erkennbare Eingabefelder.
 - Speichert nur, was ausgefüllt wurde. Nichts wird gelöscht.
 - Bearbeitete Bilder bekommen den Tag `Dia-bearbeitet`, damit sich der Fortschritt zählen lässt.
 - Läuft lokal auf `127.0.0.1`. Der Immich-API-Schlüssel bleibt im lokalen Programm und gelangt nie in den Browser.
@@ -132,13 +133,19 @@ Immich-Handy-App braucht.
    - **Was?** Ein paar Worte zum Bild.
    - **Wer?** Personen antippen (mehrere möglich).
    - **Themen:** Themen antippen. „›“ zeigt Unterthemen, oben zeigt die Pfadleiste („Alle Themen › Urlaub › Italien“),
-     wo man gerade ist. „+ Neues Thema“ legt ein Thema auf der aktuellen Ebene an.
+     wo man gerade ist. „+ Neues Thema“ legt ein Thema auf der aktuellen Ebene an. Über **„Thema suchen …“**
+     werden Themen aus allen Ebenen gefunden. Gibt es das gesuchte Thema nicht, lässt es sich direkt anlegen.
    - **Fertig:** Zusammenfassung prüfen und **Speichern ✔**.
 3. **„Dieses Bild später“** (oben rechts) überspringt ein Bild, ohne etwas zu speichern. Es kommt beim nächsten
    Start wieder. Am Ende holt **„Von vorne anfangen“** die übersprungenen Bilder sofort zurück.
 
 **Zurück** geht immer, auch mit der Esc-Taste. Oben steht der Fortschritt („Bild 12 von 340“).
-Die Oberfläche ist für Bildschirme ab **1280 × 720** ausgelegt (Browser im Vollbild: F11).
+Der Knopf **„Vollbild“** oben rechts schaltet den Browser in den Vollbildmodus und wieder zurück.
+Die Oberfläche ist für Bildschirme ab **1280 × 720** ausgelegt.
+
+Knöpfe sind hellblau gefüllt, der jeweils wichtigste Knopf dunkelblau („Weiter“) bzw. grün („Speichern“).
+Ausgewähltes ist grün mit Haken. Eingabefelder sind weiß mit dunklem Rand. Das Feld, in dem gerade
+getippt wird, ist gelb hinterlegt und orange umrandet.
 
 ---
 
