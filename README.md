@@ -15,7 +15,7 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
 >
 > - Das Programm **schreibt in deine Immich-Bibliothek** (Datum, Ort, Beschreibung, Tags, Gesichter).
 >   **Mach vorher ein Backup** und probiere es zuerst mit wenigen Bildern aus.
-> - Es gibt **keine Gewährleistung** und keinen Support. Nutzung auf eigenes Risiko.
+> - Es gibt **keine Gewährleistung** (siehe [Lizenz](#lizenz)) und keinen Support. Nutzung auf eigenes Risiko.
 > - Kein offizielles Immich-Projekt und nicht mit Immich verbunden.
 > - Gebaut gegen **Immich v3.3.1**. Andere Versionen können sich anders verhalten.
 
@@ -32,6 +32,7 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
 - [Bekannte Grenzen](#bekannte-grenzen)
 - [Technische Details](#technische-details)
 - [Entwicklung](#entwicklung)
+- [Lizenz](#lizenz)
 
 ---
 
@@ -285,3 +286,17 @@ GitHub Actions führt die Tests bei jedem Push unter Python 3.10 und 3.12 aus.
    `git tag v0.3.0 && git push origin v0.3.0`.
 3. Der Release-Workflow führt die Tests aus, prüft, ob Tag und `__version__` zusammenpassen, und hängt
    `dia-assistent-<tag>.tar.gz` samt SHA-256-Prüfsumme an das Release.
+
+---
+
+## Lizenz
+
+Copyright (C) 2026 [John-Goodenough](https://github.com/John-Goodenough)
+
+Dieses Programm ist freie Software: Du kannst es unter den Bedingungen der **GNU General Public License,
+Version 3** (oder nach deiner Wahl jeder späteren Version), wie von der Free Software Foundation veröffentlicht,
+weitergeben und/oder verändern. Veränderte Versionen müssen ebenfalls unter der GPL stehen.
+
+Das Programm wird in der Hoffnung verbreitet, dass es nützlich ist, aber **ohne jede Gewährleistung**,
+sogar ohne die implizite Gewährleistung der Marktgängigkeit oder der Eignung für einen bestimmten Zweck.
+Den vollständigen Lizenztext enthält die Datei [`LICENSE`](LICENSE).
