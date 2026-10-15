@@ -9,7 +9,7 @@ const STEP_OF = {
   place: "where", what: "what", who: "who", tags: "tags", newtag: "tags", summary: "done",
 };
 const PEOPLE_PER_PAGE = 6;
-const TAGS_PER_PAGE = 6;
+const TAG_ROW = 64 + 10; // Zeilenhöhe + Abstand, passend zu .tag-list in app.css
 const DRAFT_KEY = "dia-assistent-entwurf";
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +32,7 @@ const state = {
   tags: null,
   tagPath: [],
   tagPage: 0,
+  tagQuery: "",
   keyboard: false,
   retry: null,
 };
@@ -420,64 +421,121 @@ const SCREENS = {
       c.replaceChildren();
     }
 
-    const path = state.tagPath;
-    const prefix = path.length ? `${path.join("/")}/` : "";
-    const children = tagChildren(prefix);
-    const pages = Math.max(1, Math.ceil(children.length / TAGS_PER_PAGE));
-    state.tagPage = Math.min(state.tagPage, pages - 1);
-
-    // Brotkrumen: Alle Themen › Urlaub › Italien
+    const search = el("input", {
+      type: "text", id: "tag-search", placeholder: "Thema suchen …", autocomplete: "off", value: state.tagQuery,
+    });
+    const clear = button("✕ Leeren", () => { state.tagQuery = ""; search.value = ""; state.tagPage = 0; draw(); search.focus(); }, "btn-quiet");
     const crumbs = el("div", { class: "crumbs" });
-    const crumb = (label, depth) => {
-      if (depth === path.length) return el("span", { class: "crumb-here" }, label);
-      return button(label, () => { state.tagPath = path.slice(0, depth); state.tagPage = 0; render(); }, "btn-quiet");
-    };
-    crumbs.append(crumb("Alle Themen", 0));
-    path.forEach((part, i) => crumbs.append(el("span", { class: "crumb-sep" }, "›"), crumb(part, i + 1)));
-
     const list = el("div", { class: "tag-list" });
-    if (!children.length) {
-      list.append(el("p", {}, path.length ? "Hier gibt es noch keine Unterthemen." : "Es gibt noch keine Themen."));
-    }
-    for (const child of children.slice(state.tagPage * TAGS_PER_PAGE, (state.tagPage + 1) * TAGS_PER_PAGE)) {
-      const value = prefix + child.name;
-      const already = state.asset.tagValues.includes(value);
-      const chosen = already || a.tag_values.includes(value);
-      const toggle = el("button", {
-        type: "button",
-        class: `btn tag-toggle${chosen ? " selected" : ""}`,
-        "aria-pressed": String(chosen),
-        disabled: already,
-        title: already ? "Ist schon zugeordnet" : child.name,
-      }, el("span", {}, child.name));
-      toggle.addEventListener("click", () => {
-        const i = a.tag_values.indexOf(value);
-        if (i >= 0) a.tag_values.splice(i, 1); else a.tag_values.push(value);
-        render();
-      });
-      const open = el("button", {
-        type: "button",
-        class: `btn tag-open${child.count ? "" : " empty"}`,
-        "aria-label": `Unterthemen von ${child.name}`,
-        title: `Unterthemen von ${child.name}`,
-      }, child.count ? `${child.count} ›` : "›");
-      open.addEventListener("click", () => { state.tagPath = [...path, child.name]; state.tagPage = 0; render(); });
-      list.append(el("div", { class: "tag-item" }, toggle, open));
-    }
-
     const bottom = el("div", { class: "row tag-bottom" });
-    if (pages > 1) {
-      const prev = button("←", () => { state.tagPage--; render(); }, "btn-quiet");
-      const nextPage = button("→", () => { state.tagPage++; render(); }, "btn-quiet");
-      prev.disabled = state.tagPage === 0;
-      nextPage.disabled = state.tagPage >= pages - 1;
-      prev.setAttribute("aria-label", "Vorherige Seite");
-      nextPage.setAttribute("aria-label", "Nächste Seite");
-      bottom.append(prev, el("span", { class: "page-info" }, `${state.tagPage + 1}/${pages}`), nextPage);
-    }
-    bottom.append(button(path.length ? "+ Neues Unterthema" : "+ Neues Thema", () => go("newtag"), "btn-quiet btn-new"));
 
-    c.append(crumbs, list, bottom);
+    const openFolder = (parts) => {
+      state.tagPath = parts;
+      state.tagPage = 0;
+      state.tagQuery = "";
+      search.value = "";
+      draw();
+    };
+
+    const draw = () => {
+      const path = state.tagPath;
+      const prefix = path.length ? `${path.join("/")}/` : "";
+      const query = state.tagQuery.trim().toLocaleLowerCase("de");
+      clear.hidden = !query;
+
+      // Ohne Suche: Unterthemen der aktuellen Ebene. Mit Suche: Treffer aus allen Ebenen.
+      let items;
+      if (query) {
+        items = [...allTagValues()]
+          .filter((value) => value.split("/").some((part) => part.toLocaleLowerCase("de").includes(query)))
+          .sort((x, y) => x.localeCompare(y, "de"))
+          .map((value) => ({ value, name: value.split("/").pop(), parent: value.split("/").slice(0, -1) }));
+      } else {
+        items = tagChildren(prefix).map((child) => ({ value: prefix + child.name, name: child.name, parent: null }));
+      }
+      // Pfadleiste: Alle Themen › Urlaub › Italien (bei der Suche ausgeblendet)
+      crumbs.replaceChildren();
+      crumbs.hidden = Boolean(query);
+      const crumb = (label, depth) => depth === path.length
+        ? el("span", { class: "crumb-here" }, label)
+        : button(label, () => openFolder(path.slice(0, depth)), "btn-quiet");
+      crumbs.append(crumb("Alle Themen", 0));
+      path.forEach((part, i) => crumbs.append(el("span", { class: "crumb-sep" }, "›"), crumb(part, i + 1)));
+
+      // So viele Zeilen wie in die verfügbare Höhe passen (mindestens 2), je 2 Themen pro Zeile.
+      // Erst Pfadleiste/Seitenknöpfe setzen, dann messen: die Liste bekommt den Rest.
+      bottom.replaceChildren(button("←", null, "btn-quiet"));
+      list.replaceChildren();
+      const perPage = 2 * Math.max(2, Math.floor((list.clientHeight + 10) / TAG_ROW));
+      const pages = Math.max(1, Math.ceil(items.length / perPage));
+      state.tagPage = Math.min(state.tagPage, pages - 1);
+
+      if (!items.length) {
+        list.append(el("p", {}, query ? "Kein Thema gefunden." : path.length ? "Hier gibt es noch keine Unterthemen." : "Es gibt noch keine Themen."));
+      }
+      for (const item of items.slice(state.tagPage * perPage, (state.tagPage + 1) * perPage)) {
+        const already = state.asset.tagValues.includes(item.value);
+        const chosen = already || a.tag_values.includes(item.value);
+        const count = tagChildren(`${item.value}/`).length;
+        const toggle = el("button", {
+          type: "button",
+          class: `btn tag-toggle${chosen ? " selected" : ""}`,
+          "aria-pressed": String(chosen),
+          disabled: already,
+          title: already ? "Ist schon zugeordnet" : tagLabel(item.value),
+        }, el("span", {}, item.name), item.parent && item.parent.length ? el("small", {}, item.parent.join(" › ")) : null);
+        toggle.addEventListener("click", () => {
+          const i = a.tag_values.indexOf(item.value);
+          if (i >= 0) a.tag_values.splice(i, 1); else a.tag_values.push(item.value);
+          saveDraft();
+          const pos = [...list.children].indexOf(toggle.parentNode);
+          draw();
+          list.children[pos]?.firstChild?.focus({ preventScroll: true });
+        });
+        const open = el("button", {
+          type: "button",
+          class: `btn tag-open${count ? "" : " empty"}`,
+          "aria-label": `Unterthemen von ${item.name}`,
+          title: `Unterthemen von ${item.name}`,
+        }, count ? `${count} ›` : "›");
+        open.addEventListener("click", () => openFolder(item.value.split("/")));
+        list.append(el("div", { class: "tag-item" }, toggle, open));
+      }
+
+      bottom.replaceChildren();
+      if (pages > 1) {
+        const prev = button("←", () => { state.tagPage--; draw(); }, "btn-quiet");
+        const nextPage = button("→", () => { state.tagPage++; draw(); }, "btn-quiet");
+        prev.disabled = state.tagPage === 0;
+        nextPage.disabled = state.tagPage >= pages - 1;
+        prev.setAttribute("aria-label", "Vorherige Seite");
+        nextPage.setAttribute("aria-label", "Nächste Seite");
+        bottom.append(prev, el("span", { class: "page-info" }, `${state.tagPage + 1}/${pages}`), nextPage);
+      }
+      const typed = state.tagQuery.replace(/\//g, "-").trim();
+      if (typed) {
+        // Gesuchtes Thema gibt es auf dieser Ebene nicht: direkt anlegen anbieten
+        const value = prefix + typed;
+        const exists = [...allTagValues()].some((v) => v.toLocaleLowerCase("de") === value.toLocaleLowerCase("de"));
+        if (!exists) {
+          const where = path.length ? ` unter „${path[path.length - 1]}“` : "";
+          bottom.append(button(`+ „${typed}“${where} anlegen`, () => {
+            a.tag_values.push(value);
+            state.tagQuery = "";
+            search.value = "";
+            saveDraft();
+            draw();
+          }, "btn-quiet btn-new"));
+        }
+      } else {
+        bottom.append(button(path.length ? "+ Neues Unterthema" : "+ Neues Thema", () => go("newtag"), "btn-quiet btn-new"));
+      }
+    };
+
+    search.addEventListener("input", () => { state.tagQuery = search.value; state.tagPage = 0; draw(); });
+    search.addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
+    c.append(el("div", { class: "row" }, search, clear), crumbs, list, bottom);
+    draw();
   },
 
   newtag() {
@@ -607,6 +665,7 @@ async function openImage(draft = null) {
   state.peopleFilter = "";
   state.tagPath = [];
   state.tagPage = 0;
+  state.tagQuery = "";
   if (draft && draft.id === id) {
     Object.assign(state, { answers: { ...freshAnswers(), ...draft.answers }, screen: draft.screen, history: draft.history, decade: draft.decade });
   } else {
@@ -668,6 +727,32 @@ async function start() {
   );
   if (state.keyboard) c.querySelector(".btn").focus();
 }
+
+// Vollbild ein/aus. Der Knopf folgt dem tatsächlichen Zustand, auch wenn per Esc verlassen wird.
+function updateFullscreenButton() {
+  const on = Boolean(document.fullscreenElement);
+  $("fullscreen").textContent = on ? "Vollbild beenden" : "Vollbild";
+  $("fullscreen").setAttribute("aria-pressed", String(on));
+}
+if (document.fullscreenEnabled) {
+  $("fullscreen").hidden = false;
+  $("fullscreen").addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      showError("Vollbild ist in diesem Browser gerade nicht möglich. Alternativ die Taste F11 drücken.");
+    }
+  });
+  document.addEventListener("fullscreenchange", updateFullscreenButton);
+}
+
+// Fenstergröße geändert (z. B. Vollbild): Themenliste neu aufteilen
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (state.screen === "tags") render(); }, 150);
+});
 
 $("back").addEventListener("click", back);
 document.addEventListener("keydown", () => { state.keyboard = true; }, true);
