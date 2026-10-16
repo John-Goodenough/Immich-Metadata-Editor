@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = PROJECT_DIR / ".env"
+# Reihenfolge und Sichtbarkeit der Fragen, in der Oberfläche einstellbar
+DEFAULT_STEPS_FILE = PROJECT_DIR / "ablauf.json"
+ALL_STEPS = ("when", "where", "what", "who", "tags")
 
 
 class ConfigError(Exception):
@@ -75,3 +79,24 @@ def load_config(path: Path | None = None) -> Config:
         year_from=as_int("YEAR_FROM", Config.year_from),
         year_to=as_int("YEAR_TO", Config.year_to),
     )
+
+
+def validate_steps(steps: list[str]) -> list[str]:
+    """Erlaubt jede Teilmenge der bekannten Fragen in beliebiger Reihenfolge, aber mindestens eine."""
+    if not steps or len(set(steps)) != len(steps) or any(s not in ALL_STEPS for s in steps):
+        raise ConfigError("Ungültiger Ablauf: mindestens eine Frage, keine doppelt.")
+    return list(steps)
+
+
+def load_steps(path: Path) -> list[str]:
+    """Gespeicherter Ablauf, bei fehlender oder kaputter Datei der Standard."""
+    try:
+        return validate_steps(json.loads(path.read_text(encoding="utf-8"))["steps"])
+    except (OSError, ValueError, KeyError, TypeError, ConfigError):
+        return list(ALL_STEPS)
+
+
+def save_steps(path: Path, steps: list[str]) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"steps": validate_steps(steps)}, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(path)

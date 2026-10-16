@@ -12,3 +12,6 @@ dist/
 
 # Protokoll
 dia-assistent.log*
+
+# Eingestellter Ablauf
+ablauf.json
