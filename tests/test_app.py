@@ -9,8 +9,8 @@ API = "https://immich.example/api"
 ASSET = "11111111-1111-4111-8111-111111111111"
 
 
-def make_client():
-    return TestClient(create_app(Config(immich_url="https://immich.example", api_key="k")))
+def make_client(**kwargs):
+    return TestClient(create_app(Config(immich_url="https://immich.example", api_key="k"), **kwargs))
 
 
 def test_parse_env():
@@ -113,3 +113,31 @@ def test_settings_report_build():
 
     with make_client() as c:
         assert c.get("/api/settings").json()["build"] == build_id()
+
+
+def test_steps_default_and_saved(tmp_path):
+    path = tmp_path / "ablauf.json"
+    with make_client(steps_file=path) as c:
+        assert c.get("/api/settings").json()["steps"] == ["when", "where", "what", "who", "tags"]
+        r = c.put("/api/settings/steps", json={"steps": ["who", "when"]}, headers={"x-dia-assistent": "1"})
+        assert r.status_code == 200
+        assert c.get("/api/settings").json()["steps"] == ["who", "when"]
+    assert '"who"' in path.read_text(encoding="utf-8")
+
+
+def test_steps_rejects_invalid_and_foreign(tmp_path):
+    path = tmp_path / "ablauf.json"
+    with make_client(steps_file=path) as c:
+        h = {"x-dia-assistent": "1"}
+        assert c.put("/api/settings/steps", json={"steps": []}, headers=h).status_code == 400
+        assert c.put("/api/settings/steps", json={"steps": ["when", "when"]}, headers=h).status_code == 400
+        assert c.put("/api/settings/steps", json={"steps": ["boese"]}, headers=h).status_code == 400
+        assert c.put("/api/settings/steps", json={"steps": ["when"]}).status_code == 403
+    assert not path.exists()
+
+
+def test_broken_steps_file_falls_back(tmp_path):
+    path = tmp_path / "ablauf.json"
+    path.write_text("kaputt", encoding="utf-8")
+    with make_client(steps_file=path) as c:
+        assert c.get("/api/settings").json()["steps"] == ["when", "where", "what", "who", "tags"]

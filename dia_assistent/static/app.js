@@ -8,6 +8,14 @@ const STEP_OF = {
   decade: "when", year: "when", month: "when", day: "when", certainty: "when",
   place: "where", what: "what", who: "who", tags: "tags", newtag: "tags", summary: "done",
 };
+// Fragen-Blöcke: Reihenfolge und Sichtbarkeit kommen aus den Einstellungen
+const ALL_STEPS = ["when", "where", "what", "who", "tags"];
+const STEP_LABEL = { when: "Wann?", where: "Wo?", what: "Was?", who: "Wer?", tags: "Themen" };
+const STEP_TEXT = {
+  when: "Wann? – Datum", where: "Wo? – Ort", what: "Was? – Beschreibung",
+  who: "Wer? – Personen", tags: "Themen",
+};
+const STEP_SCREEN = { when: "decade", where: "place", what: "what", who: "who", tags: "tags" };
 const PEOPLE_PER_PAGE = 6;
 const TAG_ROW = 64 + 10; // Zeilenhöhe + Abstand, passend zu .tag-list in app.css
 const DRAFT_KEY = "dia-assistent-entwurf";
@@ -15,7 +23,7 @@ const DRAFT_KEY = "dia-assistent-entwurf";
 const $ = (id) => document.getElementById(id);
 
 const state = {
-  settings: { yearFrom: 1940, yearTo: 2010 },
+  settings: { yearFrom: 1940, yearTo: 2010, steps: ALL_STEPS },
   queue: [],
   index: 0,
   saved: 0,
@@ -150,7 +158,7 @@ function frame({ question, hint = "", back = true, next = null, nextLabel = "Wei
   $("next").className = nextLabel.startsWith("Speichern") ? "btn btn-good" : "btn btn-primary";
 
   const step = STEP_OF[state.screen];
-  const order = ["when", "where", "what", "who", "tags", "done"];
+  const order = [...state.settings.steps, "done"];
   for (const li of $("steps").children) {
     const pos = order.indexOf(li.dataset.step);
     li.className = li.dataset.step === step ? "current" : pos < order.indexOf(step) ? "done" : "";
@@ -171,6 +179,19 @@ function go(screen) {
   state.history.push(state.screen);
   state.screen = screen;
   render();
+}
+
+// Erster Bildschirm des nächsten eingeschalteten Blocks, nach dem letzten die Zusammenfassung
+function goAfter(step) {
+  const steps = state.settings.steps;
+  const next = steps[steps.indexOf(step) + 1];
+  go(next ? STEP_SCREEN[next] : "summary");
+}
+
+// Fortschrittsleiste oben passend zum eingestellten Ablauf aufbauen
+function buildStepList() {
+  $("steps").replaceChildren(...[...state.settings.steps, "done"].map((step) =>
+    el("li", { "data-step": step }, step === "done" ? "Fertig" : STEP_LABEL[step])));
 }
 
 function back() {
@@ -202,7 +223,7 @@ const SCREENS = {
     }
     c.append(grid, button("Weiß ich nicht", () => {
       Object.assign(state.answers, { year: null, month: null, day: null, approximate: false });
-      go("place");
+      goAfter("when");
     }, "btn-wide"));
   },
 
@@ -218,7 +239,7 @@ const SCREENS = {
     }
     c.append(grid, button(`Irgendwann in den ${decadeName(d)}n`, () => {
       Object.assign(state.answers, { year: d + 5, month: null, day: null, approximate: true });
-      go("place");
+      goAfter("when");
     }, "btn-wide"));
   },
 
@@ -254,8 +275,8 @@ const SCREENS = {
     const a = state.answers;
     const c = frame({ question: "Wie sicher ist das Datum?", hint: dateText({ ...a, approximate: false }) });
     c.append(el("div", { class: "grid cols-2" },
-      button("Ganz sicher", () => { a.approximate = false; go("place"); }, a.approximate ? "" : "selected"),
-      button("Nur ungefähr", () => { a.approximate = true; go("place"); }, a.approximate ? "selected" : ""),
+      button("Ganz sicher", () => { a.approximate = false; goAfter("when"); }, a.approximate ? "" : "selected"),
+      button("Nur ungefähr", () => { a.approximate = true; goAfter("when"); }, a.approximate ? "selected" : ""),
     ));
   },
 
@@ -264,7 +285,7 @@ const SCREENS = {
     const c = frame({
       question: "Wo wurde das Foto gemacht?",
       hint: "Ort eintippen, dann auf „Suchen“ drücken.",
-      next: () => go("what"),
+      next: () => goAfter("where"),
     });
     const input = el("input", { type: "text", id: "place-input", placeholder: "z. B. Rüdesheim am Rhein", autocomplete: "off" });
     const results = el("div", { class: "grid", id: "place-results" });
@@ -303,7 +324,7 @@ const SCREENS = {
     const c = frame({
       question: "Was ist auf dem Foto zu sehen?",
       hint: "Ein paar Worte genügen.",
-      next: () => go("who"),
+      next: () => goAfter("what"),
     });
     if (state.asset.description) {
       c.append(el("div", { class: "existing" }, `Bisher steht da: ${state.asset.description}`));
@@ -319,7 +340,7 @@ const SCREENS = {
     const c = frame({
       question: "Wer ist auf dem Foto?",
       hint: "Alle antippen, die zu sehen sind.",
-      next: () => go("tags"),
+      next: () => goAfter("who"),
     });
     if (state.people === null) {
       c.append(el("p", {}, "Personen werden geladen …"));
@@ -392,13 +413,15 @@ const SCREENS = {
     const names = a.person_ids
       .map((id) => (state.people || []).find((p) => p.id === id))
       .filter(Boolean).map((p) => p.name);
+    const rows = {
+      when: ["Wann:", dateText(a)],
+      where: ["Wo:", a.placeName || "nicht angegeben"],
+      what: ["Was:", a.description.trim() || "nicht angegeben"],
+      who: ["Wer:", names.length ? names.join(", ") : "nicht angegeben"],
+      tags: ["Themen:", a.tag_values.length ? a.tag_values.map(tagLabel).join(", ") : "nicht angegeben"],
+    };
     c.append(el("dl", { class: "summary" },
-      el("dt", {}, "Wann:"), el("dd", {}, dateText(a)),
-      el("dt", {}, "Wo:"), el("dd", {}, a.placeName || "nicht angegeben"),
-      el("dt", {}, "Was:"), el("dd", {}, a.description.trim() || "nicht angegeben"),
-      el("dt", {}, "Wer:"), el("dd", {}, names.length ? names.join(", ") : "nicht angegeben"),
-      el("dt", {}, "Themen:"), el("dd", {}, a.tag_values.length ? a.tag_values.map(tagLabel).join(", ") : "nicht angegeben"),
-    ));
+      state.settings.steps.flatMap((step) => [el("dt", {}, rows[step][0]), el("dd", {}, rows[step][1])])));
   },
 
   async tags() {
@@ -406,7 +429,7 @@ const SCREENS = {
     const c = frame({
       question: "Zu welchen Themen passt das Foto?",
       hint: "Antippen zum Auswählen. „›“ zeigt Unterthemen.",
-      next: () => go("summary"),
+      next: () => goAfter("tags"),
     });
     if (state.tags === null) {
       c.append(el("p", {}, "Themen werden geladen …"));
@@ -601,7 +624,7 @@ function showPlaceResults(container) {
       class: `btn place-result${a.latitude === r.lat && a.longitude === r.lon ? " selected" : ""}`,
       onclick: () => {
         Object.assign(a, { latitude: r.lat, longitude: r.lon, placeName: r.name });
-        go("what");
+        goAfter("where");
       },
     }, r.name, el("small", {}, r.detail)));
   }
@@ -610,7 +633,16 @@ function showPlaceResults(container) {
 // ---------- Ablauf ----------
 
 async function saveCurrent() {
-  const a = state.answers;
+  // Ausgeblendete Fragen schreiben nichts, auch wenn ein alter Entwurf dort Werte hat
+  const on = new Set(state.settings.steps);
+  const a = {
+    ...state.answers,
+    ...(on.has("when") ? {} : { year: null, month: null, day: null, approximate: false }),
+    ...(on.has("where") ? {} : { latitude: null, longitude: null }),
+    ...(on.has("what") ? {} : { description: "" }),
+    ...(on.has("who") ? {} : { person_ids: [] }),
+    ...(on.has("tags") ? {} : { tag_values: [] }),
+  };
   busy(true, "Wird gespeichert …");
   try {
     await api(`/api/assets/${state.asset.id}/save`, {
@@ -666,10 +698,11 @@ async function openImage(draft = null) {
   state.tagPath = [];
   state.tagPage = 0;
   state.tagQuery = "";
-  if (draft && draft.id === id) {
+  const steps = [...state.settings.steps, "done"];
+  if (draft && draft.id === id && steps.includes(STEP_OF[draft.screen])) {
     Object.assign(state, { answers: { ...freshAnswers(), ...draft.answers }, screen: draft.screen, history: draft.history, decade: draft.decade });
   } else {
-    Object.assign(state, { answers: freshAnswers(), screen: "decade", history: [], decade: null });
+    Object.assign(state, { answers: freshAnswers(), screen: STEP_SCREEN[state.settings.steps[0]], history: [], decade: null });
   }
   render();
 }
@@ -692,6 +725,74 @@ function finished() {
   } else {
     c.append(el("p", {}, "Sie können das Fenster jetzt schließen."));
   }
+  c.append(settingsButton());
+}
+
+function settingsButton() {
+  return button("⚙ Fragen einstellen", showSettings, "btn-quiet settings-open");
+}
+
+// Einstellungen: welche Fragen in welcher Reihenfolge. Gilt für alle Bilder, gespeichert auf dem Laptop.
+function showSettings() {
+  const on = state.settings.steps;
+  const work = [...on, ...ALL_STEPS.filter((s) => !on.includes(s))].map((step) => ({ step, on: on.includes(step) }));
+
+  const save = async () => {
+    const steps = work.filter((w) => w.on).map((w) => w.step);
+    if (!steps.length) {
+      showError("Mindestens eine Frage muss eingeschaltet bleiben.");
+      return;
+    }
+    busy(true, "Wird gespeichert …");
+    try {
+      await api("/api/settings/steps", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-dia-assistent": "1" },
+        body: JSON.stringify({ steps }),
+      });
+    } catch (err) {
+      busy(false);
+      showError(err.message, save);
+      return;
+    }
+    busy(false);
+    restart();
+  };
+
+  state.screen = "settings";
+  const c = frame({
+    question: "Welche Fragen, in welcher Reihenfolge?",
+    hint: "Antippen schaltet eine Frage ein oder aus. Mit ↑ und ↓ die Reihenfolge ändern.",
+    photo: false, next: save, nextLabel: "Speichern ✔",
+  });
+  const list = el("div", { class: "settings-list" });
+  const draw = (focus = null) => {
+    list.replaceChildren();
+    work.forEach((w, i) => {
+      const toggle = el("button", {
+        type: "button",
+        class: `btn settings-toggle${w.on ? " selected" : ""}`,
+        "aria-pressed": String(w.on),
+      }, el("span", {}, STEP_TEXT[w.step]), el("small", {}, w.on ? "wird gefragt" : "ausgeblendet"));
+      toggle.addEventListener("click", () => { w.on = !w.on; clearError(); draw([i, 0]); });
+      const move = (to, label, sign) => {
+        const b = el("button", { type: "button", class: "btn btn-quiet", "aria-label": `${STEP_LABEL[w.step]} ${label}`, title: label }, sign);
+        b.disabled = to < 0 || to >= work.length;
+        b.addEventListener("click", () => {
+          [work[i], work[to]] = [work[to], work[i]];
+          // Fokus bleibt am verschobenen Eintrag, am Rand auf dem anderen Pfeil
+          const up = sign === "↑";
+          const atEdge = up ? to === 0 : to === work.length - 1;
+          draw([to, up !== atEdge ? 1 : 2]);
+        });
+        return b;
+      };
+      list.append(el("div", { class: "settings-row" }, toggle, move(i - 1, "nach oben", "↑"), move(i + 1, "nach unten", "↓")));
+    });
+    if (focus) list.children[focus[0]]?.children[focus[1]]?.focus({ preventScroll: true });
+  };
+  draw();
+  c.append(list, el("div", { class: "row" }, button("Abbrechen", restart, "btn-quiet")));
 }
 
 function restart() {
@@ -703,6 +804,7 @@ async function start() {
   frame({ question: "Bilder werden gesucht …", photo: false });
   try {
     state.settings = await api("/api/settings");
+    buildStepList();
     state.queue = (await api("/api/queue")).ids;
   } catch (err) {
     frame({ question: "Es kann gerade nicht losgehen.", photo: false });
@@ -724,6 +826,7 @@ async function start() {
     el("p", { class: "big" }, state.queue.length === 1 ? "Es wartet 1 Bild auf Sie." : `Es warten ${state.queue.length} Bilder auf Sie.`),
     el("p", {}, "Zu jedem Bild gibt es ein paar Fragen. Wenn Sie etwas nicht wissen, ist das nicht schlimm – einfach weiter."),
     button("Los geht's", () => openImage(at >= 0 ? draft : null), "btn-primary big"),
+    settingsButton(),
   );
   if (state.keyboard) c.querySelector(".btn").focus();
 }

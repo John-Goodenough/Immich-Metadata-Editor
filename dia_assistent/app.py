@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__, build_id
-from .config import Config
+from .config import DEFAULT_STEPS_FILE, Config, ConfigError, load_steps, save_steps
 from .geocode import Geocoder
 from .immich import ImmichClient, ImmichError, save_answers
 from .logic import Answers, InvalidInput
@@ -41,7 +41,16 @@ class SaveRequest(BaseModel):
     tag_values: list[str] = Field(default_factory=list, max_length=100)
 
 
-def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geocoder | None = None) -> FastAPI:
+class StepsRequest(BaseModel):
+    steps: list[str] = Field(max_length=10)
+
+
+def create_app(
+    config: Config,
+    immich: ImmichClient | None = None,
+    geocoder: Geocoder | None = None,
+    steps_file: Path = DEFAULT_STEPS_FILE,
+) -> FastAPI:
     immich = immich or ImmichClient(config.immich_url, config.api_key)
     geocoder = geocoder or Geocoder(config.nominatim_url, config.nominatim_contact)
     state: dict = {"work_tag_id": None}
@@ -83,7 +92,25 @@ def create_app(config: Config, immich: ImmichClient | None = None, geocoder: Geo
 
     @app.get("/api/settings")
     async def settings():
-        return {"yearFrom": config.year_from, "yearTo": config.year_to, "version": __version__, "build": build}
+        return {
+            "yearFrom": config.year_from,
+            "yearTo": config.year_to,
+            "steps": load_steps(steps_file),
+            "version": __version__,
+            "build": build,
+        }
+
+    @app.put("/api/settings/steps")
+    async def put_steps(body: StepsRequest, request: Request):
+        # Eigener Header erzwingt CORS-Preflight: fremde Webseiten können den Ablauf nicht ändern
+        if request.headers.get(CONTROL_HEADER) != "1":
+            return JSONResponse({"fehler": "Nicht erlaubt."}, status_code=403)
+        try:
+            save_steps(steps_file, body.steps)
+        except ConfigError as exc:
+            return JSONResponse({"fehler": str(exc)}, status_code=400)
+        log.info("Ablauf geändert: %s", ", ".join(body.steps))
+        return {"steps": body.steps}
 
     @app.post("/api/quit")
     async def quit_server(request: Request):
