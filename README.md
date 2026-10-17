@@ -44,6 +44,7 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
   Reihenfolge und Auswahl der Fragen lassen sich in der Oberfläche einstellen.
 - Datum auch ungefähr („Irgendwann in den 60ern“, „nur das Jahr“).
 - Ortssuche über OpenStreetMap, Personen als Fotoknöpfe, Themen (Immich-Tags) mit Unterthemen und Suche.
+- Bild per Knopf „Bild groß“ bildschirmfüllend ansehen.
 - Vollbild-Knopf, große farbige Knöpfe, deutlich erkennbare Eingabefelder.
 - Speichert nur, was ausgefüllt wurde. Nichts wird gelöscht.
 - Bearbeitete Bilder bekommen den Tag `Dia-bearbeitet`, damit sich der Fortschritt zählen lässt.
@@ -142,6 +143,9 @@ Immich-Handy-App braucht.
 
 **Zurück** geht immer, auch mit der Esc-Taste. Oben steht der Fortschritt („Bild 12 von 340“).
 Der Knopf **„Vollbild“** oben rechts schaltet den Browser in den Vollbildmodus und wieder zurück.
+
+Fährt die Maus über das Bild, erscheint unten rechts **„Bild groß“**. Es zeigt das Bild über den ganzen
+Bildschirm; **Schließen**, ein Klick ins Bild oder Esc führt zurück. Antippen des Bildes geht auch.
 Die Oberfläche ist für Bildschirme ab **1280 × 720** ausgelegt.
 
 **Fragen einstellen:** Auf der Startseite (und am Ende) führt **„⚙ Fragen einstellen“** zu einer Liste der fünf

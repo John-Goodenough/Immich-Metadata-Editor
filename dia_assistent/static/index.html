@@ -16,7 +16,8 @@
 
   <main id="main">
     <figure id="photo-box" hidden>
-      <img id="photo" alt="Das aktuelle Dia">
+      <img id="photo" alt="Das aktuelle Dia" title="Antippen zum Vergrößern">
+      <button id="photo-full" class="btn" type="button">&#x26F6; Bild groß</button>
     </figure>
     <section id="panel">
       <ol id="steps" hidden>
@@ -40,6 +41,11 @@
       </nav>
     </section>
   </main>
+
+  <div id="viewer" role="dialog" aria-modal="true" aria-label="Bild groß" hidden>
+    <img id="viewer-photo" alt="Das aktuelle Dia, groß">
+    <button id="viewer-close" class="btn btn-primary" type="button">&#x2715; Schließen</button>
+  </div>
 
   <div id="busy" hidden><div id="busy-text">Einen Moment bitte …</div></div>
   <script src="/static/app.js"></script>

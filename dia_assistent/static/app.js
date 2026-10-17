@@ -831,6 +831,21 @@ async function start() {
   if (state.keyboard) c.querySelector(".btn").focus();
 }
 
+// Bild bildschirmfüllend anzeigen. Schließen per Knopf, Klick ins Bild oder Esc.
+function openViewer() {
+  if (!$("photo").naturalWidth) return;
+  $("viewer-photo").src = $("photo").src;
+  $("viewer").hidden = false;
+  $("top").inert = $("main").inert = true;
+  $("viewer-close").focus({ preventScroll: true });
+}
+
+function closeViewer() {
+  $("viewer").hidden = true;
+  $("top").inert = $("main").inert = false;
+  if (state.keyboard) $("photo-full").focus({ preventScroll: true });
+}
+
 // Vollbild ein/aus. Der Knopf folgt dem tatsächlichen Zustand, auch wenn per Esc verlassen wird.
 function updateFullscreenButton() {
   const on = Boolean(document.fullscreenElement);
@@ -864,7 +879,14 @@ $("skip-image").addEventListener("click", skipImage);
 $("error-retry").addEventListener("click", () => { const r = state.retry; clearError(); if (r) r(); });
 $("photo").addEventListener("error", () => { $("photo").alt = "Das Bild konnte nicht angezeigt werden."; });
 document.addEventListener("keydown", (e) => {
+  if (!$("viewer").hidden) {
+    if (e.key === "Escape") closeViewer();
+    return;
+  }
   if (e.key === "Escape" && state.asset) back();
 });
 
+$("photo").addEventListener("click", openViewer);
+$("photo-full").addEventListener("click", openViewer);
+$("viewer").addEventListener("click", closeViewer);
 start();
