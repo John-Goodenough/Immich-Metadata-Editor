@@ -687,7 +687,9 @@ async function openImage(draft = null) {
     showError(err.message, () => openImage(draft));
     return;
   }
+  Object.assign(view, { rot: 0, flip: false });
   $("photo").src = `/api/assets/${id}/preview`;
+  updateView();
   const nextId = state.queue[state.index + 1];
   if (nextId) new Image().src = `/api/assets/${nextId}/preview`;
   busy(false);
@@ -831,6 +833,171 @@ async function start() {
   if (state.keyboard) c.querySelector(".btn").focus();
 }
 
+// ---------- Bildansicht: drehen, spiegeln, vergrößern ----------
+// Ändert nur die Anzeige im Assistenten, das Bild in Immich bleibt wie es ist.
+
+const ICONS = {
+  left: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  right: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  flip: '<path d="M12 2v20" stroke-dasharray="2 3"/><path d="M9 6 3 18h6z" fill="currentColor"/><path d="m15 6 6 12h-6z"/>',
+  reset: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  zoomIn: '<circle cx="11" cy="11" r="7"/><path d="m21 21-5-5M11 8v6M8 11h6"/>',
+  zoomOut: '<circle cx="11" cy="11" r="7"/><path d="m21 21-5-5M8 11h6"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+};
+const ZOOMS = [1, 1.5, 2, 3, 4, 6];
+
+// rot: Grad im Uhrzeigersinn, flip: gespiegelt; zoom/x/y nur in der vergrößerten Ansicht
+const view = { rot: 0, flip: false, zoom: 1, x: 0, y: 0 };
+const tools = {};
+
+function toolButton(icon, label, onclick, cls = "") {
+  const b = button(el("span", {}, label), onclick, `tool ${cls}`.trim());
+  b.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon]}</svg>`);
+  return b;
+}
+
+// Bild so groß wie möglich einpassen; bei 90°/270° sind Breite und Höhe vertauscht
+function placePhoto(img, stage, zoom = 1, x = 0, y = 0) {
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const cw = stage.clientWidth, ch = stage.clientHeight;
+  if (!iw || !cw || !ch) return;
+  const turned = view.rot % 180 !== 0;
+  const scale = Math.min(cw / (turned ? ih : iw), ch / (turned ? iw : ih)) * zoom;
+  img.style.width = `${iw * scale}px`;
+  img.style.height = `${ih * scale}px`;
+  img.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) rotate(${view.rot}deg) scaleX(${view.flip ? -1 : 1})`;
+}
+
+// Verschieben nur so weit, dass das Bild das Fenster nicht verlässt
+function clampPan() {
+  const img = $("viewer-photo"), stage = $("viewer-stage");
+  const turned = view.rot % 180 !== 0;
+  const w = parseFloat(img.style.width) || 0, h = parseFloat(img.style.height) || 0;
+  const maxX = Math.max(0, ((turned ? h : w) - stage.clientWidth) / 2);
+  const maxY = Math.max(0, ((turned ? w : h) - stage.clientHeight) / 2);
+  view.x = Math.max(-maxX, Math.min(maxX, view.x));
+  view.y = Math.max(-maxY, Math.min(maxY, view.y));
+}
+
+function updateView() {
+  placePhoto($("photo"), $("photo-stage"));
+  if (!$("viewer").hidden) {
+    placePhoto($("viewer-photo"), $("viewer-stage"), view.zoom);
+    clampPan();
+    placePhoto($("viewer-photo"), $("viewer-stage"), view.zoom, view.x, view.y);
+    tools.level.textContent = `${Math.round(view.zoom * 100)} %`;
+    tools.zoomOut.disabled = view.zoom <= ZOOMS[0];
+    tools.zoomIn.disabled = view.zoom >= ZOOMS[ZOOMS.length - 1];
+  }
+  const changed = view.rot !== 0 || view.flip;
+  for (const b of tools.reset) b.disabled = !changed;
+}
+
+function rotate(deg) {
+  view.rot = (view.rot + deg + 360) % 360;
+  updateView();
+}
+
+// Spiegelt immer links/rechts so, wie das Bild gerade auf dem Bildschirm steht
+function flip() {
+  view.flip = !view.flip;
+  view.rot = (360 - view.rot) % 360;
+  updateView();
+}
+
+function resetView() {
+  Object.assign(view, { rot: 0, flip: false });
+  updateView();
+}
+
+// Zoomstufe wechseln; der Punkt (px, py) relativ zur Fenstermitte bleibt dabei an seiner Stelle
+function zoomTo(zoom, px = 0, py = 0) {
+  const k = zoom / view.zoom;
+  view.x = px - (px - view.x) * k;
+  view.y = py - (py - view.y) * k;
+  view.zoom = zoom;
+  updateView();
+}
+
+function zoomStep(dir, px, py) {
+  const i = ZOOMS.indexOf(view.zoom) + dir;
+  if (i >= 0 && i < ZOOMS.length) zoomTo(ZOOMS[i], px, py);
+}
+
+function openViewer() {
+  if (!$("photo").naturalWidth) return;
+  Object.assign(view, { zoom: 1, x: 0, y: 0 });
+  $("viewer-photo").src = $("photo").src;
+  $("viewer").hidden = false;
+  $("top").inert = $("main").inert = true;
+  updateView();
+  tools.close.focus({ preventScroll: true });
+}
+
+function closeViewer() {
+  $("viewer").hidden = true;
+  $("top").inert = $("main").inert = false;
+  if (state.keyboard) tools.open.focus({ preventScroll: true });
+}
+
+function buildPhotoTools() {
+  const rotateTools = () => [
+    toolButton("left", "Links drehen", () => rotate(-90)),
+    toolButton("right", "Rechts drehen", () => rotate(90)),
+    toolButton("flip", "Spiegeln", flip),
+  ];
+  const sep = () => el("span", { class: "tool-sep", "aria-hidden": "true" });
+
+  tools.open = toolButton("zoomIn", "Vergrößern", openViewer, "btn-primary");
+  tools.close = toolButton("close", "Schließen", closeViewer, "btn-primary");
+  tools.zoomOut = toolButton("zoomOut", "Kleiner", () => zoomStep(-1));
+  tools.zoomIn = toolButton("zoomIn", "Größer", () => zoomStep(1));
+  tools.level = el("output", { class: "zoom-level", "aria-live": "polite" }, "100 %");
+  tools.reset = [toolButton("reset", "Original", resetView), toolButton("reset", "Original", resetView)];
+
+  $("photo-tools").append(...rotateTools(), tools.reset[0], sep(), tools.open);
+  $("viewer-tools").append(tools.zoomOut, tools.level, tools.zoomIn, sep(), ...rotateTools(), tools.reset[1], sep(), tools.close);
+  updateView();
+
+  $("photo").addEventListener("click", openViewer);
+  $("photo").addEventListener("load", updateView);
+  $("viewer-photo").addEventListener("load", updateView);
+  new ResizeObserver(updateView).observe($("photo-stage"));
+  new ResizeObserver(updateView).observe($("viewer-stage"));
+
+  const stage = $("viewer-stage");
+  const fromCenter = (e) => {
+    const r = stage.getBoundingClientRect();
+    return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2];
+  };
+  stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    zoomStep(e.deltaY < 0 ? 1 : -1, ...fromCenter(e));
+  }, { passive: false });
+  // Doppelt antippen: vergrößern bzw. zurück auf ganze Größe
+  stage.addEventListener("dblclick", (e) => {
+    if (view.zoom > 1) zoomTo(1);
+    else zoomTo(2, ...fromCenter(e));
+  });
+  // Ziehen mit Maus oder Finger verschiebt das vergrößerte Bild
+  let drag = null;
+  stage.addEventListener("pointerdown", (e) => {
+    drag = { id: e.pointerId, x: e.clientX - view.x, y: e.clientY - view.y };
+    stage.setPointerCapture(e.pointerId);
+    stage.classList.add("dragging");
+  });
+  stage.addEventListener("pointermove", (e) => {
+    if (!drag || drag.id !== e.pointerId) return;
+    view.x = e.clientX - drag.x;
+    view.y = e.clientY - drag.y;
+    updateView();
+  });
+  const endDrag = () => { drag = null; stage.classList.remove("dragging"); };
+  stage.addEventListener("pointerup", endDrag);
+  stage.addEventListener("pointercancel", endDrag);
+}
+
 // Vollbild ein/aus. Der Knopf folgt dem tatsächlichen Zustand, auch wenn per Esc verlassen wird.
 function updateFullscreenButton() {
   const on = Boolean(document.fullscreenElement);
@@ -864,7 +1031,14 @@ $("skip-image").addEventListener("click", skipImage);
 $("error-retry").addEventListener("click", () => { const r = state.retry; clearError(); if (r) r(); });
 $("photo").addEventListener("error", () => { $("photo").alt = "Das Bild konnte nicht angezeigt werden."; });
 document.addEventListener("keydown", (e) => {
+  if (!$("viewer").hidden) {
+    if (e.key === "Escape") closeViewer();
+    else if (e.key === "+" || e.key === "=") zoomStep(1);
+    else if (e.key === "-") zoomStep(-1);
+    return;
+  }
   if (e.key === "Escape" && state.asset) back();
 });
 
+buildPhotoTools();
 start();

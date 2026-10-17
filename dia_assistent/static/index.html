@@ -16,7 +16,10 @@
 
   <main id="main">
     <figure id="photo-box" hidden>
-      <img id="photo" alt="Das aktuelle Dia">
+      <div id="photo-stage" class="stage">
+        <img id="photo" alt="Das aktuelle Dia" title="Antippen zum Vergrößern">
+      </div>
+      <div id="photo-tools" class="tools" role="toolbar" aria-label="Bild drehen, spiegeln, vergrößern"></div>
     </figure>
     <section id="panel">
       <ol id="steps" hidden>
@@ -40,6 +43,13 @@
       </nav>
     </section>
   </main>
+
+  <div id="viewer" role="dialog" aria-modal="true" aria-label="Bild vergrößert" hidden>
+    <div id="viewer-stage" class="stage">
+      <img id="viewer-photo" alt="Das aktuelle Dia, vergrößert" draggable="false">
+    </div>
+    <div id="viewer-tools" class="tools" role="toolbar" aria-label="Bild vergrößern, drehen, spiegeln"></div>
+  </div>
 
   <div id="busy" hidden><div id="busy-text">Einen Moment bitte …</div></div>
   <script src="/static/app.js"></script>
