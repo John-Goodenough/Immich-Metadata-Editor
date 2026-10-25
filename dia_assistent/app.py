@@ -19,7 +19,7 @@ from . import __version__, build_id
 from .config import DEFAULT_STEPS_FILE, Config, ConfigError, load_steps, save_steps
 from .geocode import Geocoder
 from .immich import ImmichClient, ImmichError, save_answers
-from .logic import Answers, InvalidInput
+from .logic import Answers, FaceAnswer, InvalidInput, face_boxes
 
 STATIC_DIR = Path(__file__).parent / "static"
 UUID = r"^[0-9a-fA-F-]{36}$"
@@ -27,6 +27,12 @@ UUID = r"^[0-9a-fA-F-]{36}$"
 CONTROL_HEADER = "x-dia-assistent"
 
 log = logging.getLogger("dia_assistent")
+
+
+class FaceRequest(BaseModel):
+    face_id: str = Field(pattern=UUID)
+    person_id: str | None = Field(default=None, pattern=UUID)
+    new_name: str | None = Field(default=None, max_length=200)
 
 
 class SaveRequest(BaseModel):
@@ -39,6 +45,7 @@ class SaveRequest(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
     person_ids: list[str] = Field(default_factory=list)
     tag_values: list[str] = Field(default_factory=list, max_length=100)
+    faces: list[FaceRequest] = Field(default_factory=list, max_length=100)
 
 
 class StepsRequest(BaseModel):
@@ -136,7 +143,7 @@ def create_app(
 
     @app.get("/api/assets/{asset_id}")
     async def asset(asset_id: str = PathParam(pattern=UUID)):
-        data = await immich.get_asset(asset_id)
+        data, faces = await asyncio.gather(immich.get_asset(asset_id), immich.faces(asset_id))
         exif = data.get("exifInfo") or {}
         return {
             "id": data["id"],
@@ -145,6 +152,7 @@ def create_app(
             "country": exif.get("country"),
             "personIds": [p["id"] for p in data.get("people") or []],
             "tagValues": [t["value"] for t in data.get("tags") or [] if visible(t)],
+            "faces": face_boxes(faces),
         }
 
     @app.get("/api/assets/{asset_id}/preview")
@@ -178,7 +186,10 @@ def create_app(
         await save_answers(
             immich,
             asset_id,
-            Answers(**body.model_dump()),
+            Answers(
+                **body.model_dump(exclude={"faces"}),
+                faces=[FaceAnswer(**f.model_dump()) for f in body.faces],
+            ),
             work_tag_id=await work_tag_id(),
             approx_tag_name=config.approx_tag_name,
             done_tag_name=config.done_tag_name,

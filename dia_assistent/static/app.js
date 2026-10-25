@@ -6,7 +6,7 @@ const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
   "August", "September", "Oktober", "November", "Dezember"];
 const STEP_OF = {
   decade: "when", year: "when", month: "when", day: "when", certainty: "when",
-  place: "where", what: "what", who: "who", tags: "tags", newtag: "tags", summary: "done",
+  place: "where", what: "what", face: "who", who: "who", tags: "tags", newtag: "tags", summary: "done",
 };
 // Fragen-Blöcke: Reihenfolge und Sichtbarkeit kommen aus den Einstellungen
 const ALL_STEPS = ["when", "where", "what", "who", "tags"];
@@ -15,8 +15,9 @@ const STEP_TEXT = {
   when: "Wann? – Datum", where: "Wo? – Ort", what: "Was? – Beschreibung",
   who: "Wer? – Personen", tags: "Themen",
 };
-const STEP_SCREEN = { when: "decade", where: "place", what: "what", who: "who", tags: "tags" };
+const STEP_SCREEN = { when: "decade", where: "place", what: "what", who: "face:0", tags: "tags" };
 const PEOPLE_PER_PAGE = 6;
+const FACE_PEOPLE_PER_PAGE = 4;
 const TAG_ROW = 64 + 10; // Zeilenhöhe + Abstand, passend zu .tag-list in app.css
 const DRAFT_KEY = "dia-assistent-entwurf";
 
@@ -50,6 +51,7 @@ function freshAnswers() {
     year: null, month: null, day: null, approximate: false,
     latitude: null, longitude: null, placeName: null,
     description: "", person_ids: [], tag_values: [],
+    faces: {}, // Gesichts-ID -> { person_id } oder { new_name }
   };
 }
 
@@ -68,6 +70,11 @@ function el(tag, attrs = {}, ...children) {
     node.append(child instanceof Node ? child : document.createTextNode(String(child)));
   }
   return node;
+}
+
+// "face:1" -> "face": Bildschirme mit Nummer teilen sich eine Funktion
+function screenName(screen = state.screen) {
+  return screen ? screen.split(":")[0] : screen;
 }
 
 function images(n) {
@@ -157,7 +164,8 @@ function frame({ question, hint = "", back = true, next = null, nextLabel = "Wei
   $("next").onclick = next;
   $("next").className = nextLabel.startsWith("Speichern") ? "btn btn-good" : "btn btn-primary";
 
-  const step = STEP_OF[state.screen];
+  const step = STEP_OF[screenName()];
+  showFaceMark(null);
   const order = [...state.settings.steps, "done"];
   for (const li of $("steps").children) {
     const pos = order.indexOf(li.dataset.step);
@@ -202,7 +210,7 @@ function back() {
 
 function render() {
   saveDraft();
-  SCREENS[state.screen]();
+  SCREENS[screenName()]();
   // Textfelder bekommen immer den Fokus, Knöpfe nur bei Tastaturbedienung:
   // ein sichtbarer Fokusrahmen ohne Tastatur würde wie eine Auswahl aussehen.
   const field = $("content").querySelector("input, textarea");
@@ -335,71 +343,101 @@ const SCREENS = {
     c.append(text);
   },
 
+  // Ein von Immich erkanntes Gesicht nach dem anderen: "Wer ist das?"
+  async face() {
+    const a = state.answers;
+    const faces = facesToName();
+    const i = Number(state.screen.split(":")[1]) || 0;
+    const f = faces[i];
+    if (!f) {
+      // keine (weiteren) unbenannten Gesichter: weiter mit der Personenliste
+      state.screen = "who";
+      return SCREENS.who();
+    }
+    const screen = state.screen;
+    const choice = a.faces[f.id];
+    const following = i + 1 < faces.length ? `face:${i + 1}` : "who";
+    const pick = (value) => {
+      if (value) a.faces[f.id] = value; else delete a.faces[f.id];
+      go(following);
+    };
+    const c = frame({
+      question: "Wer ist das?",
+      hint: faces.length > 1 ? `Gesicht ${i + 1} von ${faces.length}, im Bild orange umrandet` : "Das Gesicht ist im Bild orange umrandet.",
+      next: choice ? () => go(following) : null,
+    });
+    showFaceMark(f);
+    if (!(await loadPeople(c, screen))) return;
+
+    const input = el("input", { type: "text", placeholder: "Name eintippen …", autocomplete: "off", maxlength: "100" });
+    const create = button("", () => pick({ new_name: cleanName(input.value) }), "btn-good face-new");
+    const typed = () => cleanName(input.value);
+    const picker = peoplePicker({
+      perPage: FACE_PEOPLE_PER_PAGE,
+      query: typed,
+      isChosen: (p) => choice?.person_id === p.id,
+      onPick: (p) => pick({ person_id: p.id }),
+    });
+    const update = () => {
+      const name = typed();
+      const exact = state.people.some((p) => p.name.toLocaleLowerCase("de") === name.toLocaleLowerCase("de"));
+      create.hidden = !name || exact;
+      create.textContent = `+ „${name}“ neu anlegen`;
+      picker.page = 0;
+      picker.draw();
+    };
+    input.addEventListener("input", update);
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const name = typed();
+      const match = state.people.find((p) => p.name.toLocaleLowerCase("de") === name.toLocaleLowerCase("de"));
+      if (match) pick({ person_id: match.id });
+      else if (name) pick({ new_name: name });
+    });
+
+    const side = el("div", { class: "face-side" },
+      el("div", { class: "row" }, input, button("Weiß ich nicht", () => pick(null))), create);
+    if (choice?.new_name) side.append(el("div", { class: "chosen" }, `Gewählt: ${choice.new_name} (neu)`));
+    c.append(el("div", { class: "face-row" }, faceCrop(f), side), picker.grid, picker.pager);
+    update();
+  },
+
+  // Personen, deren Gesicht nicht erkannt wurde: Zuordnung zum ganzen Bild
   async who() {
     const a = state.answers;
+    const asked = facesToName().length > 0;
     const c = frame({
-      question: "Wer ist auf dem Foto?",
-      hint: "Alle antippen, die zu sehen sind.",
+      question: asked ? "Wer ist noch auf dem Foto?" : "Wer ist auf dem Foto?",
+      hint: asked ? "Nur Personen, deren Gesicht nicht umrandet war." : "Alle antippen, die zu sehen sind.",
       next: () => goAfter("who"),
     });
-    if (state.people === null) {
-      c.append(el("p", {}, "Personen werden geladen …"));
-      try {
-        state.people = await api("/api/people");
-      } catch (err) {
-        c.replaceChildren();
-        showError(err.message, () => render());
-        return;
-      }
-      if (state.screen !== "who") return;
-      c.replaceChildren();
-    }
+    if (!(await loadPeople(c, "who"))) return;
 
+    const marked = markedPeople();
+    const names = state.people.filter((p) => marked.has(p.id)).map((p) => p.name);
     const filter = el("input", { type: "text", placeholder: "Name suchen …", autocomplete: "off", value: state.peopleFilter });
-    const grid = el("div", { class: "people" });
-    const pager = el("div", { class: "row" });
-    const draw = () => {
-      const q = state.peopleFilter.toLowerCase();
-      const list = state.people.filter((p) => p.name.toLowerCase().includes(q));
-      const pages = Math.max(1, Math.ceil(list.length / PEOPLE_PER_PAGE));
-      state.peoplePage = Math.min(state.peoplePage, pages - 1);
-      grid.replaceChildren();
-      if (!list.length) grid.append(el("p", {}, state.people.length ? "Niemand mit diesem Namen." : "In Immich sind noch keine Personen benannt."));
-      for (const p of list.slice(state.peoplePage * PEOPLE_PER_PAGE, (state.peoplePage + 1) * PEOPLE_PER_PAGE)) {
-        const already = state.asset.personIds.includes(p.id);
-        const chosen = already || a.person_ids.includes(p.id);
-        const card = el("button", {
-          type: "button",
-          class: `btn person${chosen ? " selected" : ""}`,
-          "aria-pressed": String(chosen),
-          disabled: already,
-          title: already ? "Ist schon zugeordnet" : p.name,
-        }, el("img", { src: `/api/people/${p.id}/thumbnail`, alt: "", loading: "lazy" }), el("span", {}, p.name));
-        card.addEventListener("click", () => {
-          const pos = [...grid.children].indexOf(card);
-          const i = a.person_ids.indexOf(p.id);
-          if (i >= 0) a.person_ids.splice(i, 1); else a.person_ids.push(p.id);
-          saveDraft();
-          draw();
-          grid.children[pos]?.focus();
-        });
-        grid.append(card);
-      }
-      pager.replaceChildren();
-      if (pages > 1) {
-        pager.append(
-          button("← Vorherige", () => { state.peoplePage--; draw(); }, "btn-quiet"),
-          el("span", { style: "align-self:center" }, `Seite ${state.peoplePage + 1} von ${pages}`),
-          button("Weitere →", () => { state.peoplePage++; draw(); }, "btn-quiet"),
-        );
-        pager.children[0].disabled = state.peoplePage === 0;
-        pager.children[2].disabled = state.peoplePage >= pages - 1;
-      }
-    };
-    filter.addEventListener("input", () => { state.peopleFilter = filter.value; state.peoplePage = 0; draw(); });
+    const picker = peoplePicker({
+      perPage: PEOPLE_PER_PAGE,
+      query: () => state.peopleFilter,
+      page: state.peoplePage,
+      isChosen: (p) => a.person_ids.includes(p.id),
+      isLocked: (p) => marked.has(p.id),
+      onPick: (p, card) => {
+        const i = a.person_ids.indexOf(p.id);
+        if (i >= 0) a.person_ids.splice(i, 1); else a.person_ids.push(p.id);
+        saveDraft();
+        const pos = [...picker.grid.children].indexOf(card);
+        picker.draw();
+        picker.grid.children[pos]?.focus();
+      },
+      onPage: (page) => { state.peoplePage = page; },
+    });
+    filter.addEventListener("input", () => { state.peopleFilter = filter.value; picker.page = 0; picker.draw(); });
+    if (names.length) c.append(el("div", { class: "existing" }, `Schon zugeordnet: ${names.join(", ")}`));
     if (state.people.length > PEOPLE_PER_PAGE) c.append(filter);
-    c.append(grid, pager);
-    draw();
+    c.append(picker.grid, picker.pager);
+    picker.draw();
   },
 
   summary() {
@@ -410,9 +448,10 @@ const SCREENS = {
       next: saveCurrent,
       nextLabel: "Speichern ✔",
     });
-    const names = a.person_ids
-      .map((id) => (state.people || []).find((p) => p.id === id))
-      .filter(Boolean).map((p) => p.name);
+    const names = [...new Set([
+      ...Object.values(a.faces).map((v) => v.new_name || personName(v.person_id)),
+      ...a.person_ids.map(personName),
+    ].filter(Boolean))];
     const rows = {
       when: ["Wann:", dateText(a)],
       where: ["Wo:", a.placeName || "nicht angegeben"],
@@ -614,6 +653,114 @@ function tagLabel(value) {
   return value.split("/").join(" › ");
 }
 
+// ---------- Personen und Gesichter ----------
+
+function personName(id) {
+  return (state.people || []).find((p) => p.id === id)?.name;
+}
+
+function cleanName(text) {
+  return text.split(/\s+/).filter(Boolean).join(" ");
+}
+
+// Gesichter, die Immich erkannt hat, die aber noch keinen Namen haben
+function facesToName() {
+  return (state.asset?.faces || []).filter((f) => !f.personName);
+}
+
+// Personen, die schon über ein Gesicht am Bild hängen (vorher schon oder jetzt gewählt)
+function markedPeople() {
+  const ids = new Set(state.asset.personIds);
+  for (const v of Object.values(state.answers.faces)) if (v.person_id) ids.add(v.person_id);
+  return ids;
+}
+
+async function loadPeople(c, screen) {
+  if (state.people !== null) return true;
+  c.append(el("p", {}, "Personen werden geladen …"));
+  try {
+    state.people = await api("/api/people");
+  } catch (err) {
+    c.replaceChildren();
+    showError(err.message, () => render());
+    return false;
+  }
+  if (state.screen !== screen) return false;
+  c.replaceChildren();
+  return true;
+}
+
+// Fotoknöpfe der Personen mit Blättern. Gefiltert wird nach dem Text aus query().
+function peoplePicker({ perPage, query, page = 0, isChosen, isLocked = () => false, onPick, onPage = () => {} }) {
+  const grid = el("div", { class: "people", style: `grid-template-rows: repeat(${perPage / 2}, minmax(0, 1fr))` });
+  const pager = el("div", { class: "row" });
+  const picker = { grid, pager, page, draw };
+  function draw() {
+    const q = query().toLocaleLowerCase("de");
+    const list = state.people.filter((p) => p.name.toLocaleLowerCase("de").includes(q));
+    const pages = Math.max(1, Math.ceil(list.length / perPage));
+    picker.page = Math.min(picker.page, pages - 1);
+    onPage(picker.page);
+    grid.replaceChildren();
+    if (!list.length) grid.append(el("p", {}, state.people.length ? "Niemand mit diesem Namen." : "In Immich sind noch keine Personen benannt."));
+    for (const p of list.slice(picker.page * perPage, (picker.page + 1) * perPage)) {
+      const locked = isLocked(p);
+      const chosen = locked || isChosen(p);
+      const card = el("button", {
+        type: "button",
+        class: `btn person${chosen ? " selected" : ""}`,
+        "aria-pressed": String(chosen),
+        disabled: locked,
+        title: locked ? "Ist schon zugeordnet" : p.name,
+      }, el("img", { src: `/api/people/${p.id}/thumbnail`, alt: "", loading: "lazy" }), el("span", {}, p.name));
+      card.addEventListener("click", () => onPick(p, card));
+      grid.append(card);
+    }
+    for (const b of pager.querySelectorAll(".page-btn, .page-info")) b.remove();
+    if (pages > 1) {
+      const prev = button("← Vorherige", () => { picker.page--; draw(); }, "btn-quiet page-btn");
+      const next = button("Weitere →", () => { picker.page++; draw(); }, "btn-quiet page-btn");
+      prev.disabled = picker.page === 0;
+      next.disabled = picker.page >= pages - 1;
+      pager.prepend(prev, el("span", { class: "page-info", style: "align-self:center" }, `Seite ${picker.page + 1} von ${pages}`), next);
+    }
+  }
+  return picker;
+}
+
+// Ausschnitt aus dem Vorschaubild mit etwas Rand um das Gesicht
+function faceCrop(f) {
+  const pad = 0.35;
+  const x = Math.max(0, f.x - f.w * pad), y = Math.max(0, f.y - f.h * pad);
+  const w = Math.min(1 - x, f.w * (1 + 2 * pad)), h = Math.min(1 - y, f.h * (1 + 2 * pad));
+  const crop = el("div", { class: "face-crop", role: "img", "aria-label": "Das umrandete Gesicht, vergrößert" });
+  crop.style.backgroundImage = `url("${$("photo").src}")`;
+  crop.style.backgroundSize = `${100 / w}% ${100 / h}%`;
+  crop.style.backgroundPosition = `${w < 1 ? (x / (1 - w)) * 100 : 0}% ${h < 1 ? (y / (1 - h)) * 100 : 0}%`;
+  crop.style.aspectRatio = String((w * f.aspect) / h);
+  return crop;
+}
+
+// Oranger Rahmen um ein Gesicht im großen Bild; null blendet ihn aus
+let markedFace = null;
+function showFaceMark(f) {
+  markedFace = f;
+  placeFaceMark();
+}
+
+function placeFaceMark() {
+  const mark = $("face-mark"), img = $("photo");
+  mark.hidden = !markedFace || !img.naturalWidth;
+  if (mark.hidden) return;
+  const f = markedFace;
+  Object.assign(mark.style, {
+    left: `${img.offsetLeft + f.x * img.offsetWidth}px`,
+    top: `${img.offsetTop + f.y * img.offsetHeight}px`,
+    width: `${f.w * img.offsetWidth}px`,
+    height: `${f.h * img.offsetHeight}px`,
+  });
+}
+
 function showPlaceResults(container) {
   const a = state.answers;
   container.replaceChildren();
@@ -640,7 +787,7 @@ async function saveCurrent() {
     ...(on.has("when") ? {} : { year: null, month: null, day: null, approximate: false }),
     ...(on.has("where") ? {} : { latitude: null, longitude: null }),
     ...(on.has("what") ? {} : { description: "" }),
-    ...(on.has("who") ? {} : { person_ids: [] }),
+    ...(on.has("who") ? {} : { person_ids: [], faces: {} }),
     ...(on.has("tags") ? {} : { tag_values: [] }),
   };
   busy(true, "Wird gespeichert …");
@@ -652,6 +799,7 @@ async function saveCurrent() {
         year: a.year, month: a.month, day: a.day, approximate: a.approximate,
         latitude: a.latitude, longitude: a.longitude,
         description: a.description, person_ids: a.person_ids, tag_values: a.tag_values,
+        faces: Object.entries(a.faces).map(([face_id, v]) => ({ face_id, ...v })),
       }),
     });
   } catch (err) {
@@ -699,7 +847,7 @@ async function openImage(draft = null) {
   state.tagPage = 0;
   state.tagQuery = "";
   const steps = [...state.settings.steps, "done"];
-  if (draft && draft.id === id && steps.includes(STEP_OF[draft.screen])) {
+  if (draft && draft.id === id && steps.includes(STEP_OF[screenName(draft.screen)])) {
     Object.assign(state, { answers: { ...freshAnswers(), ...draft.answers }, screen: draft.screen, history: draft.history, decade: draft.decade });
   } else {
     Object.assign(state, { answers: freshAnswers(), screen: STEP_SCREEN[state.settings.steps[0]], history: [], decade: null });
@@ -870,6 +1018,7 @@ let resizeTimer = null;
 window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => { if (state.screen === "tags") render(); }, 150);
+  placeFaceMark();
 });
 
 $("back").addEventListener("click", back);
@@ -887,6 +1036,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 $("photo").addEventListener("click", openViewer);
+$("photo").addEventListener("load", placeFaceMark);
 $("photo-full").addEventListener("click", openViewer);
 $("viewer").addEventListener("click", closeViewer);
 start();

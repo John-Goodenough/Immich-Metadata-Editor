@@ -5,8 +5,10 @@ from dia_assistent.logic import (
     InvalidInput,
     build_asset_update,
     build_date,
+    face_boxes,
     full_image_face,
     merge_description,
+    normalize_person_name,
     normalize_tag_value,
     tags_to_assign,
 )
@@ -102,3 +104,28 @@ def test_tags_to_assign():
         "Familie", "Datum-ungefähr", "Dia-bearbeitet"]
     assert tags_to_assign(a, "Dia-bearbeitet", "Datum-ungefähr", date_written=False) == [
         "Familie", "Dia-bearbeitet"]
+
+
+def test_face_boxes_relative_sorted_and_filtered():
+    def face(fid, x1, sourceType="machine-learning", person=None):
+        return {"id": fid, "imageWidth": 1000, "imageHeight": 500, "boundingBoxX1": x1, "boundingBoxX2": x1 + 100,
+                "boundingBoxY1": 50, "boundingBoxY2": 150, "sourceType": sourceType, "person": person}
+
+    boxes = face_boxes([
+        face("rechts", 800, person={"id": "p1", "name": "", "isHidden": False}),
+        face("links", 100, person={"id": "p2", "name": "Oma", "isHidden": False}),
+        face("ganzes-bild", 0, sourceType="manual"),
+        face("versteckt", 400, person={"id": "p3", "name": "X", "isHidden": True}),
+    ])
+    assert [b["id"] for b in boxes] == ["links", "rechts"]
+    assert boxes[0] == {"id": "links", "x": 0.1, "y": 0.1, "w": 0.1, "h": 0.2, "aspect": 2.0,
+                        "personId": "p2", "personName": "Oma"}
+    assert boxes[1]["personName"] is None
+
+
+def test_normalize_person_name():
+    assert normalize_person_name("  Tante \n Erna ") == "Tante Erna"
+    with pytest.raises(InvalidInput):
+        normalize_person_name("   ")
+    with pytest.raises(InvalidInput):
+        normalize_person_name("x" * 101)

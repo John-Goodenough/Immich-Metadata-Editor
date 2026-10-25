@@ -50,6 +50,25 @@ def test_invalid_date_gives_400():
 
 
 @respx.mock
+def test_asset_includes_faces():
+    respx.get(f"{API}/assets/{ASSET}").respond(json={"id": ASSET, "exifInfo": {}, "people": [], "tags": []})
+    respx.get(f"{API}/faces", params={"id": ASSET}).respond(json=[{
+        "id": "f1", "imageWidth": 200, "imageHeight": 100, "boundingBoxX1": 20, "boundingBoxX2": 60,
+        "boundingBoxY1": 10, "boundingBoxY2": 50, "sourceType": "machine-learning", "person": None,
+    }])
+    with make_client() as c:
+        faces = c.get(f"/api/assets/{ASSET}").json()["faces"]
+    assert faces == [{"id": "f1", "x": 0.1, "y": 0.1, "w": 0.2, "h": 0.4, "aspect": 2.0,
+                      "personId": None, "personName": None}]
+
+
+def test_save_rejects_bad_face_id():
+    with make_client() as c:
+        r = c.post(f"/api/assets/{ASSET}/save", json={"faces": [{"face_id": "../x", "new_name": "Erna"}]})
+    assert r.status_code in (400, 422)
+
+
+@respx.mock
 def test_tag_list_hides_technical_tags():
     respx.get(f"{API}/tags").respond(json=[
         {"id": "1", "name": "Dia-Nachpflege", "value": "Dia-Nachpflege"},

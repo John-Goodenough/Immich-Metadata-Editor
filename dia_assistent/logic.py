@@ -13,6 +13,15 @@ class InvalidInput(ValueError):
 
 
 @dataclass
+class FaceAnswer:
+    """Ein von Immich erkanntes Gesicht bekommt eine vorhandene oder eine neue Person."""
+
+    face_id: str
+    person_id: str | None = None
+    new_name: str | None = None
+
+
+@dataclass
 class Answers:
     """Was im Assistenten ausgefüllt wurde. None bedeutet: übersprungen."""
 
@@ -25,6 +34,7 @@ class Answers:
     description: str | None = None
     person_ids: list[str] = field(default_factory=list)
     tag_values: list[str] = field(default_factory=list)
+    faces: list[FaceAnswer] = field(default_factory=list)
 
 
 def build_date(year: int | None, month: int | None, day: int | None, tz: str) -> str | None:
@@ -119,3 +129,40 @@ def full_image_face(asset_id: str, person_id: str, width: int, height: int) -> d
         "width": width,
         "height": height,
     }
+
+
+def normalize_person_name(name: str) -> str:
+    """Name einer neuen Person säubern: Leerraum zusammenziehen, nicht leer."""
+    name = " ".join(name.split())
+    if not name:
+        raise InvalidInput("Eine neue Person hat keinen Namen.")
+    if len(name) > 100:
+        raise InvalidInput("Ein Name ist zu lang.")
+    return name
+
+
+def face_boxes(faces: list[dict]) -> list[dict]:
+    """Antwort von GET /faces für die Oberfläche: Rahmen als Anteil der Bildgröße.
+
+    Manuelle Gesichter (z. B. Ganzbild-Rahmen) und Gesichter versteckter
+    Personen fallen weg. Sortiert von links nach rechts.
+    """
+    result = []
+    for face in faces:
+        width, height = face.get("imageWidth"), face.get("imageHeight")
+        person = face.get("person") or {}
+        if face.get("sourceType") == "manual" or not width or not height or person.get("isHidden"):
+            continue
+        x1, x2 = sorted((face["boundingBoxX1"], face["boundingBoxX2"]))
+        y1, y2 = sorted((face["boundingBoxY1"], face["boundingBoxY2"]))
+        result.append({
+            "id": face["id"],
+            "x": x1 / width,
+            "y": y1 / height,
+            "w": (x2 - x1) / width,
+            "h": (y2 - y1) / height,
+            "aspect": width / height,
+            "personId": person.get("id"),
+            "personName": person.get("name") or None,
+        })
+    return sorted(result, key=lambda f: (f["x"], f["y"]))
