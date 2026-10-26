@@ -11,6 +11,58 @@ from . import __version__
 from .immich import ImmichError
 
 
+# Nominatim "addresstype" (bzw. "type") auf deutsche Bezeichnungen, damit z. B. Stadt und Kreis
+# gleichen Namens unterscheidbar sind. Unbekannte Arten bleiben ohne Bezeichnung.
+KINDS = {
+    "city": "Stadt",
+    "town": "Stadt",
+    "village": "Dorf",
+    "hamlet": "Weiler",
+    "isolated_dwelling": "Einzelhof",
+    "farm": "Hof",
+    "locality": "Ortslage",
+    "municipality": "Gemeinde",
+    "suburb": "Stadtteil",
+    "borough": "Stadtbezirk",
+    "city_district": "Stadtbezirk",
+    "district": "Bezirk",
+    "quarter": "Viertel",
+    "neighbourhood": "Viertel",
+    "city_block": "Häuserblock",
+    "county": "Kreis",
+    "state_district": "Regierungsbezirk",
+    "state": "Bundesland",
+    "province": "Provinz",
+    "region": "Region",
+    "country": "Land",
+    "continent": "Kontinent",
+    "island": "Insel",
+    "islet": "Insel",
+    "road": "Straße",
+    "peak": "Berg",
+    "mountain_range": "Gebirge",
+    "water": "Gewässer",
+    "lake": "See",
+    "river": "Fluss",
+    "bay": "Bucht",
+    "beach": "Strand",
+    "station": "Bahnhof",
+    "attraction": "Sehenswürdigkeit",
+    "castle": "Burg/Schloss",
+    "church": "Kirche",
+    "museum": "Museum",
+    "park": "Park",
+}
+
+
+def place_kind(item: dict) -> str | None:
+    for key in ("addresstype", "type"):
+        kind = KINDS.get(item.get(key) or "")
+        if kind:
+            return kind
+    return None
+
+
 class Geocoder:
     def __init__(self, url: str, contact: str = "", transport: httpx.AsyncBaseTransport | None = None):
         agent = f"Dia-Assistent/{__version__} (privates Familienprojekt"
@@ -52,6 +104,7 @@ class Geocoder:
         results = [
             {
                 "name": item.get("name") or item["display_name"].split(",")[0],
+                "kind": place_kind(item),
                 "detail": item["display_name"],
                 "lat": float(item["lat"]),
                 "lon": float(item["lon"]),

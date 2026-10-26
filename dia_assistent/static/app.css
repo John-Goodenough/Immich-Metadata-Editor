@@ -159,6 +159,9 @@ input[type=text]:focus, textarea:focus {
 textarea { flex: 1; resize: none; min-height: 160px; }
 
 .place-result { text-align: left; min-width: 0; padding-top: 4px; padding-bottom: 4px; }
+/* Art des Ortes (Stadt, Kreis, Land …) als Etikett hinter dem Namen */
+.place-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.place-kind { flex: none; padding: 1px 10px; font-size: 18px; font-weight: 700; color: #fff; background: var(--btn-border); border-radius: 6px; }
 .chosen { padding: 12px 16px; background: var(--good-bg); border-radius: var(--radius); }
 .existing { padding: 10px 14px; background: var(--panel); border-radius: var(--radius); font-size: 22px; max-height: 5.5em; overflow: hidden; }
 

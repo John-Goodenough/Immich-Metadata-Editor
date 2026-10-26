@@ -770,10 +770,11 @@ function showPlaceResults(container) {
       type: "button",
       class: `btn place-result${a.latitude === r.lat && a.longitude === r.lon ? " selected" : ""}`,
       onclick: () => {
-        Object.assign(a, { latitude: r.lat, longitude: r.lon, placeName: r.name });
+        Object.assign(a, { latitude: r.lat, longitude: r.lon, placeName: r.kind ? `${r.name} (${r.kind})` : r.name });
         goAfter("where");
       },
-    }, r.name, el("small", {}, r.detail)));
+    }, el("span", { class: "place-name" }, r.name, r.kind ? el("span", { class: "place-kind" }, r.kind) : null),
+    el("small", {}, r.detail)));
   }
 }
 

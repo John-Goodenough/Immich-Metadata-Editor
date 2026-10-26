@@ -93,11 +93,11 @@ async def test_geocoder_maps_results_and_sends_user_agent():
 
     route = respx.get("https://nominatim.example/search").respond(json=[
         {"name": "Rüdesheim am Rhein", "display_name": "Rüdesheim am Rhein, Hessen, Deutschland",
-         "lat": "49.978", "lon": "7.923"},
+         "lat": "49.978", "lon": "7.923", "addresstype": "town", "type": "administrative"},
     ])
     geo = Geocoder("https://nominatim.example/search", contact="test@example.org")
     result = await geo.search("  Rüdesheim  ")
-    assert result == [{"name": "Rüdesheim am Rhein", "detail": "Rüdesheim am Rhein, Hessen, Deutschland",
+    assert result == [{"name": "Rüdesheim am Rhein", "kind": "Stadt", "detail": "Rüdesheim am Rhein, Hessen, Deutschland",
                        "lat": 49.978, "lon": 7.923}]
     request = route.calls.last.request
     assert "test@example.org" in request.headers["user-agent"]
@@ -105,6 +105,15 @@ async def test_geocoder_maps_results_and_sends_user_agent():
     await geo.search("rüdesheim")  # aus dem Zwischenspeicher
     assert route.call_count == 1
     await geo.aclose()
+
+
+def test_place_kind():
+    from dia_assistent.geocode import place_kind
+
+    assert place_kind({"addresstype": "county", "type": "administrative"}) == "Kreis"
+    assert place_kind({"addresstype": "city", "type": "administrative"}) == "Stadt"
+    assert place_kind({"type": "lake"}) == "See"  # ohne addresstype: type
+    assert place_kind({"addresstype": "unbekannt", "type": "administrative"}) is None
 
 
 async def test_geocoder_rate_limit():

@@ -134,7 +134,8 @@ Immich-Handy-App braucht.
 1. Starter doppelklicken. Der Browser öffnet sich mit „Guten Tag! Es warten N Bilder auf Sie.“
 2. Zu jedem Bild nacheinander:
    - **Wann?** Jahrzehnt → Jahr → Monat → Tag, jeweils mit „Weiß ich nicht“, danach „Ganz sicher“ oder „Nur ungefähr“.
-   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen.
+   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
+     Stadtteil, Kreis, Bundesland, Land …), damit z. B. die Stadt Kassel und der Landkreis Kassel unterscheidbar sind.
    - **Was?** Ein paar Worte zum Bild.
    - **Wer?** Hat Immich Gesichter erkannt, kommt jedes einzeln: Das Gesicht ist im Bild orange umrandet und
      daneben vergrößert. Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
