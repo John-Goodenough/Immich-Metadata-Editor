@@ -50,6 +50,25 @@ def test_invalid_date_gives_400():
 
 
 @respx.mock
+def test_asset_includes_faces():
+    respx.get(f"{API}/assets/{ASSET}").respond(json={"id": ASSET, "exifInfo": {}, "people": [], "tags": []})
+    respx.get(f"{API}/faces", params={"id": ASSET}).respond(json=[{
+        "id": "f1", "imageWidth": 200, "imageHeight": 100, "boundingBoxX1": 20, "boundingBoxX2": 60,
+        "boundingBoxY1": 10, "boundingBoxY2": 50, "sourceType": "machine-learning", "person": None,
+    }])
+    with make_client() as c:
+        faces = c.get(f"/api/assets/{ASSET}").json()["faces"]
+    assert faces == [{"id": "f1", "x": 0.1, "y": 0.1, "w": 0.2, "h": 0.4, "aspect": 2.0,
+                      "personId": None, "personName": None}]
+
+
+def test_save_rejects_bad_face_id():
+    with make_client() as c:
+        r = c.post(f"/api/assets/{ASSET}/save", json={"faces": [{"face_id": "../x", "new_name": "Erna"}]})
+    assert r.status_code in (400, 422)
+
+
+@respx.mock
 def test_tag_list_hides_technical_tags():
     respx.get(f"{API}/tags").respond(json=[
         {"id": "1", "name": "Dia-Nachpflege", "value": "Dia-Nachpflege"},
@@ -58,6 +77,8 @@ def test_tag_list_hides_technical_tags():
         {"id": "4", "name": "urlaub", "value": "urlaub"},
         {"id": "5", "name": "Italien", "value": "urlaub/Italien"},
         {"id": "6", "name": "Familie", "value": "Familie"},
+        {"id": "7", "name": "Europa", "value": "Europa"},
+        {"id": "8", "name": "Deutschland", "value": "Europa/Deutschland"},
     ])
     with make_client() as c:
         assert c.get("/api/tags").json() == ["Familie", "urlaub", "urlaub/Italien"]
@@ -74,11 +95,13 @@ async def test_geocoder_maps_results_and_sends_user_agent():
 
     route = respx.get("https://nominatim.example/search").respond(json=[
         {"name": "Rüdesheim am Rhein", "display_name": "Rüdesheim am Rhein, Hessen, Deutschland",
-         "lat": "49.978", "lon": "7.923"},
+         "lat": "49.978", "lon": "7.923", "addresstype": "town", "type": "administrative",
+         "address": {"town": "Rüdesheim am Rhein", "country": "Deutschland", "country_code": "de"}},
     ])
     geo = Geocoder("https://nominatim.example/search", contact="test@example.org")
     result = await geo.search("  Rüdesheim  ")
-    assert result == [{"name": "Rüdesheim am Rhein", "detail": "Rüdesheim am Rhein, Hessen, Deutschland",
+    assert result == [{"name": "Rüdesheim am Rhein", "kind": "Stadt", "tag": "Europa/Deutschland/Rüdesheim am Rhein",
+                       "detail": "Rüdesheim am Rhein, Hessen, Deutschland",
                        "lat": 49.978, "lon": 7.923}]
     request = route.calls.last.request
     assert "test@example.org" in request.headers["user-agent"]
@@ -86,6 +109,33 @@ async def test_geocoder_maps_results_and_sends_user_agent():
     await geo.search("rüdesheim")  # aus dem Zwischenspeicher
     assert route.call_count == 1
     await geo.aclose()
+
+
+def test_place_kind():
+    from dia_assistent.geocode import place_kind
+
+    assert place_kind({"addresstype": "county", "type": "administrative"}) == "Kreis"
+    assert place_kind({"addresstype": "city", "type": "administrative"}) == "Stadt"
+    assert place_kind({"type": "lake"}) == "See"  # ohne addresstype: type
+    assert place_kind({"addresstype": "unbekannt", "type": "administrative"}) is None
+
+
+def test_place_tag():
+    from dia_assistent.geocode import CONTINENTS, place_tag
+
+    de = {"country": "Deutschland", "country_code": "de"}
+    assert place_tag({"addresstype": "county", "address": de}, "Landkreis Kassel") == "Europa/Deutschland/Kassel"
+    assert place_tag({"addresstype": "state_district", "address": de}, "Regierungsbezirk Kassel") == "Europa/Deutschland/Kassel"
+    assert place_tag({"addresstype": "city", "address": de}, "Kassel") == "Europa/Deutschland/Kassel"
+    assert place_tag({"addresstype": "county", "address": de}, "Rhein-Sieg-Kreis") == "Europa/Deutschland/Rhein-Sieg-Kreis"
+    assert place_tag({"addresstype": "town", "address": de}, "Stadtallendorf") == "Europa/Deutschland/Stadtallendorf"
+    assert place_tag({"addresstype": "country", "address": de}, "Deutschland") == "Europa/Deutschland"
+    assert place_tag({"addresstype": "continent"}, "Europa") == "Europa"
+    assert place_tag({"addresstype": "city", "address": {"country": "USA", "country_code": "us"}},
+                     "New York") == "Nordamerika/USA/New York"
+    assert place_tag({"addresstype": "town", "address": de}, "Halle/Saale") == "Europa/Deutschland/Halle-Saale"
+    assert place_tag({"type": "bay", "address": {}}, "Golf von Biskaya") is None  # kein Land
+    assert CONTINENTS["CY"] == "Europa" and CONTINENTS["TR"] == "Asien"
 
 
 async def test_geocoder_rate_limit():

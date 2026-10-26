@@ -43,7 +43,8 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
   **Wann?** · **Wo?** · **Was ist zu sehen?** · **Wer ist darauf?** · **Welche Themen?**
   Reihenfolge und Auswahl der Fragen lassen sich in der Oberfläche einstellen.
 - Datum auch ungefähr („Irgendwann in den 60ern“, „nur das Jahr“).
-- Ortssuche über OpenStreetMap, Personen als Fotoknöpfe, Themen (Immich-Tags) mit Unterthemen und Suche.
+- Ortssuche über OpenStreetMap. Von Immich erkannte Gesichter werden einzeln benannt (auch mit neuen Personen),
+  weitere Personen per Fotoknopf. Themen (Immich-Tags) mit Unterthemen und Suche.
 - Bild per Knopf „Bild groß“ bildschirmfüllend ansehen.
 - Vollbild-Knopf, große farbige Knöpfe, deutlich erkennbare Eingabefelder.
 - Speichert nur, was ausgefüllt wurde. Nichts wird gelöscht.
@@ -99,7 +100,9 @@ Konto gehören, dem die Bilder gehören. Es reichen diese Rechte:
 | `tag.asset` | Tags an Bildern setzen und den Arbeits-Tag entfernen |
 | `person.read` | Personen und ihre Gesichtsbilder anzeigen |
 | `face.read` | prüfen, wer schon zugeordnet ist |
-| `face.create` | Person einem Bild zuordnen |
+| `face.create` | Person ohne erkanntes Gesicht einem Bild zuordnen |
+| `face.update` | erkanntes Gesicht einer Person zuordnen |
+| `person.create` | neue Person anlegen |
 
 ### 3. `.env` ausfüllen
 
@@ -131,9 +134,18 @@ Immich-Handy-App braucht.
 1. Starter doppelklicken. Der Browser öffnet sich mit „Guten Tag! Es warten N Bilder auf Sie.“
 2. Zu jedem Bild nacheinander:
    - **Wann?** Jahrzehnt → Jahr → Monat → Tag, jeweils mit „Weiß ich nicht“, danach „Ganz sicher“ oder „Nur ungefähr“.
-   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen.
+   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
+     Stadtteil, Kreis, Bundesland, Land …), damit z. B. die Stadt Kassel und der Landkreis Kassel unterscheidbar sind.
+     Der gewählte Ort wird zusätzlich als Tag `Kontinent/Land/Ort` gespeichert, z. B. `Europa/Deutschland/Kassel`
+     (bei einem Land nur `Europa/Deutschland`). Verwaltungszusätze wie „Landkreis“, „Kreis“ oder
+     „Regierungsbezirk“ vor dem Namen fallen weg, Stadt und Landkreis Kassel bekommen also beide `…/Kassel`. Der Kontinent ergibt sich aus dem Ländercode; Grundlage ist die
+     UN-Einteilung, Mittelamerika und Karibik zählen zu Nordamerika, Zypern und Russland zu Europa, die Türkei zu
+     Asien. Orts-Tags erscheinen nicht in der Themenliste.
    - **Was?** Ein paar Worte zum Bild.
-   - **Wer?** Personen antippen (mehrere möglich).
+   - **Wer?** Hat Immich Gesichter erkannt, kommt jedes einzeln: Das Gesicht ist im Bild orange umrandet und
+     daneben vergrößert. Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
+     **„+ … neu anlegen“** die Person an. „Weiß ich nicht“ geht zum nächsten Gesicht. Danach (oder wenn kein
+     Gesicht erkannt wurde) weitere Personen antippen, deren Gesicht nicht umrandet war.
    - **Themen:** Themen antippen. „›“ zeigt Unterthemen, oben zeigt die Pfadleiste („Alle Themen › Urlaub › Italien“),
      wo man gerade ist. „+ Neues Thema“ legt ein Thema auf der aktuellen Ebene an. Über **„Thema suchen …“**
      werden Themen aus allen Ebenen gefunden. Gibt es das gesuchte Thema nicht, lässt es sich direkt anlegen.
@@ -169,7 +181,8 @@ getippt wird, ist gelb hinterlegt und orange umrandet.
 | „Nur ungefähr“ | zusätzlich Tag `Datum-ungefähr` |
 | Ort | Breiten- und Längengrad. Stadt und Land ergänzt Immich daraus selbst (siehe [Technische Details](#technische-details)) |
 | Beschreibung | wird an eine vorhandene Beschreibung **angehängt** |
-| Personen | manuelles Gesicht mit Rahmen über das **ganze Bild** (siehe [Grenzen](#bekannte-grenzen)) |
+| Erkanntes Gesicht benannt | das Gesicht wird der Person zugeordnet (`PUT /faces/{personId}`), neue Namen werden vorher als Person angelegt |
+| Weitere Personen | manuelles Gesicht mit Rahmen über das **ganze Bild** (siehe [Grenzen](#bekannte-grenzen)) |
 | Themen | Tags am Bild. Neue Themen werden erst beim Speichern angelegt, samt fehlender Oberthemen |
 | immer | Tag `Dia-bearbeitet`, danach wird `Dia-Nachpflege` entfernt |
 
@@ -206,16 +219,21 @@ findet sich die Ursache in `dia-assistent.log` im Programmordner. Der API-Schlü
 
 ## Bekannte Grenzen
 
-- **Personen:** Die Immich-API kennt kein „Person X ist auf Bild Y“. Der Assistent legt deshalb über `POST /faces`
-  ein manuelles Gesicht an, dessen Rahmen das **ganze Bild** umfasst. Das Bild erscheint dann bei der Person,
-  in der Gesichtsansicht ist der Rahmen aber das komplette Bild. Nur benannte, nicht versteckte Personen
-  werden angeboten.
+- **Personen ohne erkanntes Gesicht:** Die Immich-API kennt kein „Person X ist auf Bild Y“. Für Personen,
+  deren Gesicht Immich nicht gefunden hat, legt der Assistent über `POST /faces` ein manuelles Gesicht an,
+  dessen Rahmen das **ganze Bild** umfasst. Das Bild erscheint dann bei der Person, aber Immich lernt daraus
+  nichts: Für manuelle Gesichter berechnet Immich keinen Gesichtsabdruck, die Person wird auf anderen Bildern
+  also nicht wiedererkannt. Neue Personen lassen sich deshalb nur über ein erkanntes Gesicht anlegen.
+- **Erkannte Gesichter:** Benannt wird nur das einzelne Gesicht. Gehört es in Immich zu einer unbenannten
+  Gesichtsgruppe, bleiben die übrigen Gesichter dieser Gruppe unberührt. Gesichter, die Immich schon einer
+  benannten Person zugeordnet hat, werden nicht abgefragt und lassen sich im Assistenten nicht korrigieren.
 - **Themen** werden nur hinzugefügt, nie entfernt.
 - **Diktieren** gibt es nicht: Firefox unterstützt die Web-Speech-API nicht, und Chrome schickt die Sprache an Google.
 - **Testabdeckung:** Das Programm ist mit einer echten Immich-Instanz (v3.3.1) im Einsatz, aber nicht systematisch
   dagegen getestet. Automatisch geprüft wird gegen eine gemockte API. Bewusst nicht verifiziert sind:
   - [ ] Suche über `filter.tagIds` bei archivierten Bildern
   - [ ] Darstellung des Ganzbild-Gesichts in Personen- und Gesichtsansicht
+  - [ ] Benennen erkannter Gesichter und Anlegen neuer Personen gegen ein echtes Immich
   - [ ] Automatisches Ergänzen von Stadt und Land nach dem Setzen der Koordinaten
   - [ ] Anlegen verschachtelter neuer Themen per `PUT /tags`
   - [ ] Firefox (die Oberfläche wurde nur in Chromium geprüft)
@@ -246,11 +264,13 @@ Ermittelt aus der OpenAPI-Spezifikation (`x-immich-permission`) und dem Server-Q
 |---|---|
 | Bilder mit Arbeits-Tag finden | `POST /search/metadata` mit `{"filter": {"tagIds": {"any": [<id>]}}}`, Blättern über `nextCursor` |
 | Bilddaten / Vorschau | `GET /assets/{id}`, `GET /assets/{id}/thumbnail?size=preview` |
+| Orts-Tag | wie Tags: `PUT /tags` mit `Kontinent/Land/Ort` |
 | Datum, Ort, Beschreibung | `PUT /assets/{id}` (`dateTimeOriginal`, `latitude`, `longitude`, `description`) |
 | Tags lesen / anlegen | `GET /tags`, `PUT /tags` (Upsert mit vollen Pfaden wie `Urlaub/Italien/Venedig`) |
 | Tags setzen / entfernen | `PUT` / `DELETE /tags/{id}/assets` |
 | Personen | `GET /people`, `GET /people/{id}/thumbnail` |
-| Gesichter | `GET /faces?id=…`, `POST /faces` |
+| Gesichter | `GET /faces?id=…`, `POST /faces`, `PUT /faces/{personId}` mit `{"id": <Gesicht>}` |
+| Neue Person | `POST /people` |
 
 Die Felder `tagIds` und `page` auf oberster Ebene von `/search/metadata` sind seit v3.2.0 veraltet und werden nicht
 verwendet. Immich prüft die Rechte eines API-Schlüssels pro Endpunkt, innerhalb der Dienste nur noch die
@@ -276,7 +296,8 @@ Das passiert asynchron und kann einige Sekunden dauern.
 <summary><b>Wiederholbares Speichern und Entwürfe</b></summary>
 
 - Jeder Speicherschritt ist wiederholbar: Eine Beschreibung, die schon am Ende steht, wird nicht noch einmal angehängt.
-  Personen, die schon zugeordnet sind, bekommen kein zweites Gesicht. „Schon getaggt“ gilt nicht als Fehler.
+  Personen, die schon zugeordnet sind, bekommen kein zweites Gesicht. Eine neue Person wird nur angelegt, wenn
+  es noch keine sichtbare Person mit diesem Namen gibt. „Schon getaggt“ gilt nicht als Fehler.
 - Das angefangene Bild wird als Entwurf im Browser (`localStorage`) gesichert und nach einem Neustart fortgesetzt.
 - Der Starter vergleicht eine Prüfsumme des Programmcodes mit dem laufenden Server und ersetzt ihn bei Abweichung.
 

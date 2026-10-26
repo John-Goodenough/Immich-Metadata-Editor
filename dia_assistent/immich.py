@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from .logic import Answers, InvalidInput, build_asset_update, full_image_face, tags_to_assign
+from .logic import Answers, InvalidInput, build_asset_update, full_image_face, normalize_person_name, tags_to_assign
 
 
 class ImmichError(Exception):
@@ -106,9 +106,11 @@ class ImmichClient:
     async def person_thumbnail(self, person_id: str) -> httpx.Response:
         return await self._request("GET", f"/people/{person_id}/thumbnail")
 
+    async def faces(self, asset_id: str) -> list[dict]:
+        return (await self._request("GET", "/faces", params={"id": asset_id})).json()
+
     async def face_person_ids(self, asset_id: str) -> set[str]:
-        faces = (await self._request("GET", "/faces", params={"id": asset_id})).json()
-        return {f["person"]["id"] for f in faces if f.get("person")}
+        return {f["person"]["id"] for f in await self.faces(asset_id) if f.get("person")}
 
     # --- Schreiben -------------------------------------------------------
 
@@ -135,6 +137,34 @@ class ImmichClient:
 
     async def add_face(self, body: dict) -> None:
         await self._request("POST", "/faces", json=body)
+
+    async def create_person(self, name: str) -> str:
+        return (await self._request("POST", "/people", json={"name": name})).json()["id"]
+
+    async def reassign_face(self, face_id: str, person_id: str) -> None:
+        """PUT /faces/{personId}: das Gesicht aus dem Body gehört danach zu dieser Person."""
+        await self._request("PUT", f"/faces/{person_id}", json={"id": face_id})
+
+
+async def _assign_faces(client: ImmichClient, asset_id: str, answers: Answers) -> None:
+    """Erkannte Gesichter benennen. Neue Personen werden nur angelegt, wenn es den Namen noch nicht gibt,
+    damit ein wiederholtes Speichern keine doppelten Personen erzeugt."""
+    faces = {face["id"]: face for face in await client.faces(asset_id)}
+    by_name: dict[str, str] | None = None
+    for answer in answers.faces:
+        face = faces.get(answer.face_id)
+        if face is None:
+            raise InvalidInput("Ein markiertes Gesicht gibt es nicht mehr. Bitte die Seite neu laden.")
+        person_id = answer.person_id
+        if person_id is None:
+            name = normalize_person_name(answer.new_name or "")
+            if by_name is None:
+                by_name = {p["name"].casefold(): p["id"] for p in await client.people()}
+            if name.casefold() not in by_name:
+                by_name[name.casefold()] = await client.create_person(name)
+            person_id = by_name[name.casefold()]
+        if (face.get("person") or {}).get("id") != person_id:
+            await client.reassign_face(answer.face_id, person_id)
 
 
 async def save_answers(
@@ -167,6 +197,9 @@ async def save_answers(
         if value not in tag_ids:
             raise ImmichError("Ein Thema konnte nicht angelegt werden.")
         await client.tag_asset(tag_ids[value], asset_id)
+
+    if answers.faces:
+        await _assign_faces(client, asset_id, answers)
 
     if answers.person_ids:
         width = asset.get("width") or exif.get("exifImageWidth")

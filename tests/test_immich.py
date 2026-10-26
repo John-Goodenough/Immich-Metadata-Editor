@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from dia_assistent.immich import ImmichClient, ImmichError, save_answers
-from dia_assistent.logic import Answers
+from dia_assistent.logic import Answers, FaceAnswer, InvalidInput
 
 BASE = "https://immich.example"
 API = f"{BASE}/api"
@@ -173,3 +173,57 @@ async def test_untag_permission_error(mock, client):
     mock.delete(f"/tags/{WORK_TAG}/assets").respond(json=[{"id": ASSET, "success": False, "error": "no_permission"}])
     with pytest.raises(ImmichError):
         await client.untag_asset(WORK_TAG, ASSET)
+
+
+FACE_1 = "88888888-8888-4888-8888-888888888888"
+FACE_2 = "99999999-9999-4999-8999-999999999999"
+CLUSTER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+NEW_PERSON = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+
+
+def save_mocks(mock, faces):
+    mock.get(f"/assets/{ASSET}").respond(json=asset())
+    mock.put("/tags").mock(side_effect=upsert_echo)
+    mock.put(f"/tags/{DONE_TAG}/assets").respond(json=[{"id": ASSET, "success": True}])
+    mock.get("/faces", params={"id": ASSET}).respond(json=faces)
+    return mock.delete(f"/tags/{WORK_TAG}/assets").respond(json=[{"id": ASSET, "success": True}])
+
+
+async def test_faces_assigned_to_existing_and_new_person(mock, client):
+    untag = save_mocks(mock, [
+        {"id": FACE_1, "person": {"id": CLUSTER, "name": ""}},
+        {"id": FACE_2, "person": None},
+    ])
+    mock.get("/people").respond(json={"people": [{"id": PERSON_A, "name": "Oma", "isHidden": False}],
+                                      "hasNextPage": False})
+    create = mock.post("/people").respond(201, json={"id": NEW_PERSON, "name": "Tante Erna"})
+    to_a = mock.put(f"/faces/{PERSON_A}").respond(json={})
+    to_new = mock.put(f"/faces/{NEW_PERSON}").respond(json={})
+    whole = mock.post("/faces")
+
+    answers = Answers(faces=[FaceAnswer(FACE_1, person_id=PERSON_A), FaceAnswer(FACE_2, new_name="  Tante   Erna ")])
+    await save_answers(client, ASSET, answers, **SAVE)
+
+    assert body(to_a.calls.last) == {"id": FACE_1}
+    assert body(create.calls.last) == {"name": "Tante Erna"}
+    assert body(to_new.calls.last) == {"id": FACE_2}
+    assert not whole.called
+    assert untag.called
+
+
+async def test_face_retry_reuses_person_and_skips_done_face(mock, client):
+    # erster Versuch hat Person schon angelegt und Gesicht zugeordnet
+    save_mocks(mock, [{"id": FACE_2, "person": {"id": NEW_PERSON, "name": "Tante Erna"}}])
+    mock.get("/people").respond(json={"people": [{"id": NEW_PERSON, "name": "Tante Erna", "isHidden": False}],
+                                      "hasNextPage": False})
+    create = mock.post("/people")
+    reassign = mock.put(f"/faces/{NEW_PERSON}")
+    await save_answers(client, ASSET, Answers(faces=[FaceAnswer(FACE_2, new_name="tante erna")]), **SAVE)
+    assert not create.called and not reassign.called
+
+
+async def test_unknown_face_keeps_work_tag(mock, client):
+    untag = save_mocks(mock, [])
+    with pytest.raises(InvalidInput):
+        await save_answers(client, ASSET, Answers(faces=[FaceAnswer(FACE_1, person_id=PERSON_A)]), **SAVE)
+    assert not untag.called
