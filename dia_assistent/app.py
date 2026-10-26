@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__, build_id
 from .config import DEFAULT_STEPS_FILE, Config, ConfigError, load_steps, save_steps
-from .geocode import Geocoder
+from .geocode import CONTINENT_NAMES, Geocoder
 from .immich import ImmichClient, ImmichError, save_answers
 from .logic import Answers, FaceAnswer, InvalidInput, face_boxes
 
@@ -42,6 +42,7 @@ class SaveRequest(BaseModel):
     approximate: bool = False
     latitude: float | None = None
     longitude: float | None = None
+    place_tag: str | None = Field(default=None, max_length=400)
     description: str | None = Field(default=None, max_length=5000)
     person_ids: list[str] = Field(default_factory=list)
     tag_values: list[str] = Field(default_factory=list, max_length=100)
@@ -131,6 +132,9 @@ def create_app(
     hidden_tags = {config.tag_name, config.approx_tag_name, config.done_tag_name}
 
     def visible(tag: dict) -> bool:
+        # Orts-Tags (Kontinent/Land/Ort) entstehen über die Ortsfrage und gehören nicht in die Themenliste
+        if tag["value"].split("/")[0] in CONTINENT_NAMES:
+            return False
         return tag["value"] not in hidden_tags and tag["name"] not in hidden_tags
 
     @app.get("/api/tags")

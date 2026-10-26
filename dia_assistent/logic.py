@@ -31,6 +31,7 @@ class Answers:
     approximate: bool = False
     latitude: float | None = None
     longitude: float | None = None
+    place_tag: str | None = None
     description: str | None = None
     person_ids: list[str] = field(default_factory=list)
     tag_values: list[str] = field(default_factory=list)
@@ -111,6 +112,8 @@ def normalize_tag_value(value: str) -> str:
 def tags_to_assign(answers: Answers, done_tag: str, approx_tag: str, date_written: bool) -> list[str]:
     """Alle Tag-Pfade, die das Bild beim Speichern bekommt (ohne Doppelte)."""
     values = [normalize_tag_value(v) for v in answers.tag_values]
+    if answers.place_tag:
+        values.append(normalize_tag_value(answers.place_tag))
     if answers.approximate and date_written:
         values.append(approx_tag)
     values.append(done_tag)

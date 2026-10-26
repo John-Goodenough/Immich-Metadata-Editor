@@ -49,7 +49,7 @@ const state = {
 function freshAnswers() {
   return {
     year: null, month: null, day: null, approximate: false,
-    latitude: null, longitude: null, placeName: null,
+    latitude: null, longitude: null, placeName: null, placeTag: null,
     description: "", person_ids: [], tag_values: [],
     faces: {}, // Gesichts-ID -> { person_id } oder { new_name }
   };
@@ -317,7 +317,7 @@ const SCREENS = {
     if (a.placeName) {
       c.append(el("div", { class: "chosen" }, `Gewählt: ${a.placeName} `,
         button("Entfernen", () => {
-          Object.assign(a, { latitude: null, longitude: null, placeName: null });
+          Object.assign(a, { latitude: null, longitude: null, placeName: null, placeTag: null });
           render();
         }, "btn-quiet")));
     } else if (state.asset.city) {
@@ -770,7 +770,7 @@ function showPlaceResults(container) {
       type: "button",
       class: `btn place-result${a.latitude === r.lat && a.longitude === r.lon ? " selected" : ""}`,
       onclick: () => {
-        Object.assign(a, { latitude: r.lat, longitude: r.lon, placeName: r.kind ? `${r.name} (${r.kind})` : r.name });
+        Object.assign(a, { latitude: r.lat, longitude: r.lon, placeName: r.kind ? `${r.name} (${r.kind})` : r.name, placeTag: r.tag || null });
         goAfter("where");
       },
     }, el("span", { class: "place-name" }, r.name, r.kind ? el("span", { class: "place-kind" }, r.kind) : null),
@@ -786,7 +786,7 @@ async function saveCurrent() {
   const a = {
     ...state.answers,
     ...(on.has("when") ? {} : { year: null, month: null, day: null, approximate: false }),
-    ...(on.has("where") ? {} : { latitude: null, longitude: null }),
+    ...(on.has("where") ? {} : { latitude: null, longitude: null, placeTag: null }),
     ...(on.has("what") ? {} : { description: "" }),
     ...(on.has("who") ? {} : { person_ids: [], faces: {} }),
     ...(on.has("tags") ? {} : { tag_values: [] }),
@@ -798,7 +798,7 @@ async function saveCurrent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         year: a.year, month: a.month, day: a.day, approximate: a.approximate,
-        latitude: a.latitude, longitude: a.longitude,
+        latitude: a.latitude, longitude: a.longitude, place_tag: a.placeTag ?? null,
         description: a.description, person_ids: a.person_ids, tag_values: a.tag_values,
         faces: Object.entries(a.faces).map(([face_id, v]) => ({ face_id, ...v })),
       }),

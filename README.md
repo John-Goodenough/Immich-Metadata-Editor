@@ -136,6 +136,10 @@ Immich-Handy-App braucht.
    - **Wann?** Jahrzehnt → Jahr → Monat → Tag, jeweils mit „Weiß ich nicht“, danach „Ganz sicher“ oder „Nur ungefähr“.
    - **Wo?** Ort eintippen, „Suchen“, Treffer antippen. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
      Stadtteil, Kreis, Bundesland, Land …), damit z. B. die Stadt Kassel und der Landkreis Kassel unterscheidbar sind.
+     Der gewählte Ort wird zusätzlich als Tag `Kontinent/Land/Ort` gespeichert, z. B. `Europa/Deutschland/Kassel`
+     (bei einem Land nur `Europa/Deutschland`). Der Kontinent ergibt sich aus dem Ländercode; Grundlage ist die
+     UN-Einteilung, Mittelamerika und Karibik zählen zu Nordamerika, Zypern und Russland zu Europa, die Türkei zu
+     Asien. Orts-Tags erscheinen nicht in der Themenliste.
    - **Was?** Ein paar Worte zum Bild.
    - **Wer?** Hat Immich Gesichter erkannt, kommt jedes einzeln: Das Gesicht ist im Bild orange umrandet und
      daneben vergrößert. Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
@@ -259,6 +263,7 @@ Ermittelt aus der OpenAPI-Spezifikation (`x-immich-permission`) und dem Server-Q
 |---|---|
 | Bilder mit Arbeits-Tag finden | `POST /search/metadata` mit `{"filter": {"tagIds": {"any": [<id>]}}}`, Blättern über `nextCursor` |
 | Bilddaten / Vorschau | `GET /assets/{id}`, `GET /assets/{id}/thumbnail?size=preview` |
+| Orts-Tag | wie Tags: `PUT /tags` mit `Kontinent/Land/Ort` |
 | Datum, Ort, Beschreibung | `PUT /assets/{id}` (`dateTimeOriginal`, `latitude`, `longitude`, `description`) |
 | Tags lesen / anlegen | `GET /tags`, `PUT /tags` (Upsert mit vollen Pfaden wie `Urlaub/Italien/Venedig`) |
 | Tags setzen / entfernen | `PUT` / `DELETE /tags/{id}/assets` |

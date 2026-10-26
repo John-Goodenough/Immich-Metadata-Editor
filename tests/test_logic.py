@@ -104,6 +104,9 @@ def test_tags_to_assign():
         "Familie", "Datum-ungefähr", "Dia-bearbeitet"]
     assert tags_to_assign(a, "Dia-bearbeitet", "Datum-ungefähr", date_written=False) == [
         "Familie", "Dia-bearbeitet"]
+    b = Answers(place_tag="Europa/Deutschland/Kassel", tag_values=["Familie"])
+    assert tags_to_assign(b, "Dia-bearbeitet", "Datum-ungefähr", date_written=False) == [
+        "Familie", "Europa/Deutschland/Kassel", "Dia-bearbeitet"]
 
 
 def test_face_boxes_relative_sorted_and_filtered():
