@@ -124,7 +124,11 @@ def test_place_tag():
     from dia_assistent.geocode import CONTINENTS, place_tag
 
     de = {"country": "Deutschland", "country_code": "de"}
-    assert place_tag({"addresstype": "county", "address": de}, "Landkreis Kassel") == "Europa/Deutschland/Landkreis Kassel"
+    assert place_tag({"addresstype": "county", "address": de}, "Landkreis Kassel") == "Europa/Deutschland/Kassel"
+    assert place_tag({"addresstype": "state_district", "address": de}, "Regierungsbezirk Kassel") == "Europa/Deutschland/Kassel"
+    assert place_tag({"addresstype": "city", "address": de}, "Kassel") == "Europa/Deutschland/Kassel"
+    assert place_tag({"addresstype": "county", "address": de}, "Rhein-Sieg-Kreis") == "Europa/Deutschland/Rhein-Sieg-Kreis"
+    assert place_tag({"addresstype": "town", "address": de}, "Stadtallendorf") == "Europa/Deutschland/Stadtallendorf"
     assert place_tag({"addresstype": "country", "address": de}, "Deutschland") == "Europa/Deutschland"
     assert place_tag({"addresstype": "continent"}, "Europa") == "Europa"
     assert place_tag({"addresstype": "city", "address": {"country": "USA", "country_code": "us"}},

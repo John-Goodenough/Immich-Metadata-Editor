@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 
 import httpx
@@ -83,6 +84,15 @@ def place_kind(item: dict) -> str | None:
     return None
 
 
+# Verwaltungszusätze vor dem Namen. Der Tag dient der groben Zuordnung, daher bekommen
+# z. B. Stadt und Landkreis Kassel denselben Tag "Kassel".
+ADMIN_PREFIXES = re.compile(
+    r"^(Landkreis|Kreis|Stadtkreis|Regierungsbezirk|Regionalverband|Städteregion|Region|Bezirk|"
+    r"Verwaltungsbezirk|Gemeinde|Stadt)\s+(?=\S)",
+    re.IGNORECASE,
+)
+
+
 def place_tag(item: dict, name: str) -> str | None:
     """Tag-Pfad Kontinent/Land/Ort, z. B. "Europa/Deutschland/Kassel". Ein Land ergibt nur
     Kontinent/Land. Ohne Land (z. B. auf dem Meer) gibt es keinen Tag."""
@@ -97,8 +107,9 @@ def place_tag(item: dict, name: str) -> str | None:
     if not continent or not country:
         return None
     parts = [continent, country]
-    if item.get("addresstype") != "country" and clean(name) and clean(name) != country:
-        parts.append(clean(name))
+    place = ADMIN_PREFIXES.sub("", clean(name))
+    if item.get("addresstype") != "country" and place and place != country:
+        parts.append(place)
     return "/".join(parts)
 
 

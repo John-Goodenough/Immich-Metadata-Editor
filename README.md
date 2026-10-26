@@ -137,7 +137,8 @@ Immich-Handy-App braucht.
    - **Wo?** Ort eintippen, „Suchen“, Treffer antippen. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
      Stadtteil, Kreis, Bundesland, Land …), damit z. B. die Stadt Kassel und der Landkreis Kassel unterscheidbar sind.
      Der gewählte Ort wird zusätzlich als Tag `Kontinent/Land/Ort` gespeichert, z. B. `Europa/Deutschland/Kassel`
-     (bei einem Land nur `Europa/Deutschland`). Der Kontinent ergibt sich aus dem Ländercode; Grundlage ist die
+     (bei einem Land nur `Europa/Deutschland`). Verwaltungszusätze wie „Landkreis“, „Kreis“ oder
+     „Regierungsbezirk“ vor dem Namen fallen weg, Stadt und Landkreis Kassel bekommen also beide `…/Kassel`. Der Kontinent ergibt sich aus dem Ländercode; Grundlage ist die
      UN-Einteilung, Mittelamerika und Karibik zählen zu Nordamerika, Zypern und Russland zu Europa, die Türkei zu
      Asien. Orts-Tags erscheinen nicht in der Themenliste.
    - **Was?** Ein paar Worte zum Bild.
