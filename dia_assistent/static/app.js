@@ -50,7 +50,7 @@ function freshAnswers() {
   return {
     year: null, month: null, day: null, approximate: false,
     latitude: null, longitude: null, placeName: null, placeTag: null,
-    description: "", person_ids: [], tag_values: [],
+    description: "", person_ids: [], new_people: [], tag_values: [],
     faces: {}, // Gesichts-ID -> { person_id } oder { new_name }
   };
 }
@@ -416,7 +416,18 @@ const SCREENS = {
 
     const marked = markedPeople();
     const names = state.people.filter((p) => marked.has(p.id)).map((p) => p.name);
-    const filter = el("input", { type: "text", placeholder: "Name suchen …", autocomplete: "off", value: state.peopleFilter });
+    const filter = el("input", { type: "text", placeholder: "Name suchen oder neu eintippen …", autocomplete: "off", maxlength: "100", value: state.peopleFilter });
+    const sameName = (x, y) => x.toLocaleLowerCase("de") === y.toLocaleLowerCase("de");
+    // Neue Person ohne erkanntes Gesicht (z. B. mit dem Rücken zur Kamera)
+    const addNew = () => {
+      const name = cleanName(filter.value);
+      if (!name || a.new_people.some((n) => sameName(n, name))) return;
+      a.new_people.push(name);
+      state.peopleFilter = "";
+      saveDraft();
+      render();
+    };
+    const create = button("", addNew, "btn-good face-new");
     const picker = peoplePicker({
       perPage: PEOPLE_PER_PAGE,
       query: () => state.peopleFilter,
@@ -433,11 +444,26 @@ const SCREENS = {
       },
       onPage: (page) => { state.peoplePage = page; },
     });
-    filter.addEventListener("input", () => { state.peopleFilter = filter.value; picker.page = 0; picker.draw(); });
+    const update = () => {
+      const name = cleanName(filter.value);
+      create.hidden = !name || [...state.people.map((p) => p.name), ...a.new_people].some((n) => sameName(n, name));
+      create.textContent = `+ „${name}“ neu anlegen`;
+    };
+    filter.addEventListener("input", () => { state.peopleFilter = filter.value; picker.page = 0; picker.draw(); update(); });
+    filter.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || create.hidden) return;
+      e.preventDefault();
+      addNew();
+    });
     if (names.length) c.append(el("div", { class: "existing" }, `Schon zugeordnet: ${names.join(", ")}`));
-    if (state.people.length > PEOPLE_PER_PAGE) c.append(filter);
+    c.append(filter, create);
+    if (a.new_people.length) {
+      c.append(el("div", { class: "row new-people" }, ...a.new_people.map((name, i) =>
+        button(`${name} (neu) ✕`, () => { a.new_people.splice(i, 1); saveDraft(); render(); }, "btn-quiet new-person"))));
+    }
     c.append(picker.grid, picker.pager);
     picker.draw();
+    update();
   },
 
   summary() {
@@ -451,6 +477,7 @@ const SCREENS = {
     const names = [...new Set([
       ...Object.values(a.faces).map((v) => v.new_name || personName(v.person_id)),
       ...a.person_ids.map(personName),
+      ...a.new_people,
     ].filter(Boolean))];
     const rows = {
       when: ["Wann:", dateText(a)],
@@ -788,7 +815,7 @@ async function saveCurrent() {
     ...(on.has("when") ? {} : { year: null, month: null, day: null, approximate: false }),
     ...(on.has("where") ? {} : { latitude: null, longitude: null, placeTag: null }),
     ...(on.has("what") ? {} : { description: "" }),
-    ...(on.has("who") ? {} : { person_ids: [], faces: {} }),
+    ...(on.has("who") ? {} : { person_ids: [], new_people: [], faces: {} }),
     ...(on.has("tags") ? {} : { tag_values: [] }),
   };
   busy(true, "Wird gespeichert …");
@@ -799,7 +826,7 @@ async function saveCurrent() {
       body: JSON.stringify({
         year: a.year, month: a.month, day: a.day, approximate: a.approximate,
         latitude: a.latitude, longitude: a.longitude, place_tag: a.placeTag ?? null,
-        description: a.description, person_ids: a.person_ids, tag_values: a.tag_values,
+        description: a.description, person_ids: a.person_ids, new_people: a.new_people, tag_values: a.tag_values,
         faces: Object.entries(a.faces).map(([face_id, v]) => ({ face_id, ...v })),
       }),
     });

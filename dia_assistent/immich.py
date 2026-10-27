@@ -146,23 +146,31 @@ class ImmichClient:
         await self._request("PUT", f"/faces/{person_id}", json={"id": face_id})
 
 
-async def _assign_faces(client: ImmichClient, asset_id: str, answers: Answers) -> None:
-    """Erkannte Gesichter benennen. Neue Personen werden nur angelegt, wenn es den Namen noch nicht gibt,
+class _PersonsByName:
+    """Personen über den Namen finden oder anlegen. Angelegt wird nur, wenn es den Namen noch nicht gibt,
     damit ein wiederholtes Speichern keine doppelten Personen erzeugt."""
+
+    def __init__(self, client: ImmichClient):
+        self._client = client
+        self._ids: dict[str, str] | None = None
+
+    async def id_for(self, raw_name: str) -> str:
+        name = normalize_person_name(raw_name)
+        if self._ids is None:
+            self._ids = {p["name"].casefold(): p["id"] for p in await self._client.people()}
+        if name.casefold() not in self._ids:
+            self._ids[name.casefold()] = await self._client.create_person(name)
+        return self._ids[name.casefold()]
+
+
+async def _assign_faces(client: ImmichClient, asset_id: str, answers: Answers, persons: _PersonsByName) -> None:
+    """Erkannte Gesichter benennen."""
     faces = {face["id"]: face for face in await client.faces(asset_id)}
-    by_name: dict[str, str] | None = None
     for answer in answers.faces:
         face = faces.get(answer.face_id)
         if face is None:
             raise InvalidInput("Ein markiertes Gesicht gibt es nicht mehr. Bitte die Seite neu laden.")
-        person_id = answer.person_id
-        if person_id is None:
-            name = normalize_person_name(answer.new_name or "")
-            if by_name is None:
-                by_name = {p["name"].casefold(): p["id"] for p in await client.people()}
-            if name.casefold() not in by_name:
-                by_name[name.casefold()] = await client.create_person(name)
-            person_id = by_name[name.casefold()]
+        person_id = answer.person_id or await persons.id_for(answer.new_name or "")
         if (face.get("person") or {}).get("id") != person_id:
             await client.reassign_face(answer.face_id, person_id)
 
@@ -198,16 +206,20 @@ async def save_answers(
             raise ImmichError("Ein Thema konnte nicht angelegt werden.")
         await client.tag_asset(tag_ids[value], asset_id)
 
+    persons = _PersonsByName(client)
     if answers.faces:
-        await _assign_faces(client, asset_id, answers)
+        await _assign_faces(client, asset_id, answers, persons)
 
-    if answers.person_ids:
+    if answers.person_ids or answers.new_people:
         width = asset.get("width") or exif.get("exifImageWidth")
         height = asset.get("height") or exif.get("exifImageHeight")
         if not width or not height:
             raise InvalidInput("Die Bildgröße ist unbekannt, Personen können nicht zugeordnet werden.")
+        person_ids = list(answers.person_ids)
+        for name in answers.new_people:
+            person_ids.append(await persons.id_for(name))
         present = await client.face_person_ids(asset_id)
-        for person_id in dict.fromkeys(answers.person_ids):
+        for person_id in dict.fromkeys(person_ids):
             if person_id not in present:
                 await client.add_face(full_image_face(asset_id, person_id, int(width), int(height)))
 

@@ -145,7 +145,9 @@ Immich-Handy-App braucht.
    - **Wer?** Hat Immich Gesichter erkannt, kommt jedes einzeln: Das Gesicht ist im Bild orange umrandet und
      daneben vergrößert. Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
      **„+ … neu anlegen“** die Person an. „Weiß ich nicht“ geht zum nächsten Gesicht. Danach (oder wenn kein
-     Gesicht erkannt wurde) weitere Personen antippen, deren Gesicht nicht umrandet war.
+     Gesicht erkannt wurde) weitere Personen antippen, deren Gesicht nicht umrandet war, z. B. weil sie mit dem
+     Rücken zur Kamera stehen. Wer dort nicht zu finden ist, wird über das Suchfeld mit **„+ … neu anlegen“**
+     als neue Person angelegt.
    - **Themen:** Themen antippen. „›“ zeigt Unterthemen, oben zeigt die Pfadleiste („Alle Themen › Urlaub › Italien“),
      wo man gerade ist. „+ Neues Thema“ legt ein Thema auf der aktuellen Ebene an. Über **„Thema suchen …“**
      werden Themen aus allen Ebenen gefunden. Gibt es das gesuchte Thema nicht, lässt es sich direkt anlegen.

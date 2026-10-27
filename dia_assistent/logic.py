@@ -34,6 +34,7 @@ class Answers:
     place_tag: str | None = None
     description: str | None = None
     person_ids: list[str] = field(default_factory=list)
+    new_people: list[str] = field(default_factory=list)
     tag_values: list[str] = field(default_factory=list)
     faces: list[FaceAnswer] = field(default_factory=list)
 

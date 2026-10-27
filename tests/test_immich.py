@@ -227,3 +227,15 @@ async def test_unknown_face_keeps_work_tag(mock, client):
     with pytest.raises(InvalidInput):
         await save_answers(client, ASSET, Answers(faces=[FaceAnswer(FACE_1, person_id=PERSON_A)]), **SAVE)
     assert not untag.called
+
+
+async def test_new_people_without_face_get_whole_image_face(mock, client):
+    untag = save_mocks(mock, [])
+    mock.get("/people").respond(json={"people": [{"id": PERSON_A, "name": "Oma", "isHidden": False}],
+                                      "hasNextPage": False})
+    create = mock.post("/people").respond(201, json={"id": NEW_PERSON, "name": "Onkel Fritz"})
+    whole = mock.post("/faces").respond(201)
+    await save_answers(client, ASSET, Answers(new_people=["Onkel  Fritz", "oma"]), **SAVE)
+    assert create.call_count == 1 and body(create.calls.last) == {"name": "Onkel Fritz"}
+    assert [body(c)["personId"] for c in whole.calls] == [NEW_PERSON, PERSON_A]
+    assert untag.called

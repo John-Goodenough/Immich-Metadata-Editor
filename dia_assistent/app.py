@@ -8,6 +8,7 @@ import os
 import signal
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import FastAPI, Request
 from fastapi import Path as PathParam
@@ -45,6 +46,7 @@ class SaveRequest(BaseModel):
     place_tag: str | None = Field(default=None, max_length=400)
     description: str | None = Field(default=None, max_length=5000)
     person_ids: list[str] = Field(default_factory=list)
+    new_people: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=50)
     tag_values: list[str] = Field(default_factory=list, max_length=100)
     faces: list[FaceRequest] = Field(default_factory=list, max_length=100)
 
