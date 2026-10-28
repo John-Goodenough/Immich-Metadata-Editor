@@ -11,7 +11,7 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = PROJECT_DIR / ".env"
 # Reihenfolge und Sichtbarkeit der Fragen, in der Oberfläche einstellbar
 DEFAULT_STEPS_FILE = PROJECT_DIR / "ablauf.json"
-ALL_STEPS = ("when", "where", "what", "who", "tags")
+ALL_STEPS = ("when", "where", "what", "who", "tags", "album")
 
 
 class ConfigError(Exception):

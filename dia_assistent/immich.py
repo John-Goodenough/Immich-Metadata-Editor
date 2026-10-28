@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import httpx
 
-from .logic import Answers, InvalidInput, build_asset_update, full_image_face, normalize_person_name, tags_to_assign
+from .logic import (
+    Answers,
+    InvalidInput,
+    build_asset_update,
+    full_image_face,
+    normalize_album_name,
+    normalize_person_name,
+    tags_to_assign,
+)
 
 
 class ImmichError(Exception):
@@ -112,6 +120,12 @@ class ImmichClient:
     async def face_person_ids(self, asset_id: str) -> set[str]:
         return {f["person"]["id"] for f in await self.faces(asset_id) if f.get("person")}
 
+    async def albums(self, asset_id: str | None = None) -> list[dict]:
+        """GET /albums, mit asset_id nur die Alben, in denen das Bild schon ist."""
+        params = {"assetId": asset_id} if asset_id else None
+        albums = (await self._request("GET", "/albums", params=params)).json()
+        return sorted(albums, key=lambda a: a["albumName"].casefold())
+
     # --- Schreiben -------------------------------------------------------
 
     async def update_asset(self, asset_id: str, body: dict) -> None:
@@ -135,6 +149,16 @@ class ImmichClient:
             if not item.get("success") and item.get("error") not in ("duplicate", "not_found"):
                 raise ImmichError("Die Markierung konnte nicht geändert werden.")
 
+    async def add_to_album(self, album_id: str, asset_id: str) -> None:
+        results = (await self._request("PUT", f"/albums/{album_id}/assets", json={"ids": [asset_id]})).json()
+        for item in results:
+            # "duplicate": Bild ist schon im Album
+            if not item.get("success") and item.get("error") != "duplicate":
+                raise ImmichError("Das Bild konnte nicht ins Album gelegt werden.")
+
+    async def create_album(self, name: str, asset_id: str) -> None:
+        await self._request("POST", "/albums", json={"albumName": name, "assetIds": [asset_id]})
+
     async def add_face(self, body: dict) -> None:
         await self._request("POST", "/faces", json=body)
 
@@ -146,25 +170,50 @@ class ImmichClient:
         await self._request("PUT", f"/faces/{person_id}", json={"id": face_id})
 
 
-async def _assign_faces(client: ImmichClient, asset_id: str, answers: Answers) -> None:
-    """Erkannte Gesichter benennen. Neue Personen werden nur angelegt, wenn es den Namen noch nicht gibt,
+class _PersonsByName:
+    """Personen über den Namen finden oder anlegen. Angelegt wird nur, wenn es den Namen noch nicht gibt,
     damit ein wiederholtes Speichern keine doppelten Personen erzeugt."""
+
+    def __init__(self, client: ImmichClient):
+        self._client = client
+        self._ids: dict[str, str] | None = None
+
+    async def id_for(self, raw_name: str) -> str:
+        name = normalize_person_name(raw_name)
+        if self._ids is None:
+            self._ids = {p["name"].casefold(): p["id"] for p in await self._client.people()}
+        if name.casefold() not in self._ids:
+            self._ids[name.casefold()] = await self._client.create_person(name)
+        return self._ids[name.casefold()]
+
+
+async def _assign_faces(client: ImmichClient, asset_id: str, answers: Answers, persons: _PersonsByName) -> None:
+    """Erkannte Gesichter benennen."""
     faces = {face["id"]: face for face in await client.faces(asset_id)}
-    by_name: dict[str, str] | None = None
     for answer in answers.faces:
         face = faces.get(answer.face_id)
         if face is None:
             raise InvalidInput("Ein markiertes Gesicht gibt es nicht mehr. Bitte die Seite neu laden.")
-        person_id = answer.person_id
-        if person_id is None:
-            name = normalize_person_name(answer.new_name or "")
-            if by_name is None:
-                by_name = {p["name"].casefold(): p["id"] for p in await client.people()}
-            if name.casefold() not in by_name:
-                by_name[name.casefold()] = await client.create_person(name)
-            person_id = by_name[name.casefold()]
+        person_id = answer.person_id or await persons.id_for(answer.new_name or "")
         if (face.get("person") or {}).get("id") != person_id:
             await client.reassign_face(answer.face_id, person_id)
+
+
+async def _add_to_albums(client: ImmichClient, asset_id: str, answers: Answers) -> None:
+    """Bild in gewählte Alben legen. Ein neues Album wird nur angelegt, wenn es den Namen noch nicht gibt,
+    damit ein wiederholtes Speichern kein zweites Album erzeugt."""
+    album_ids = list(answers.album_ids)
+    if answers.new_albums:
+        by_name = {a["albumName"].casefold(): a["id"] for a in await client.albums()}
+        for raw in dict.fromkeys(answers.new_albums):
+            name = normalize_album_name(raw)
+            if name.casefold() in by_name:
+                album_ids.append(by_name[name.casefold()])
+            else:
+                await client.create_album(name, asset_id)
+                by_name[name.casefold()] = ""
+    for album_id in dict.fromkeys(album_ids):
+        await client.add_to_album(album_id, asset_id)
 
 
 async def save_answers(
@@ -198,16 +247,22 @@ async def save_answers(
             raise ImmichError("Ein Thema konnte nicht angelegt werden.")
         await client.tag_asset(tag_ids[value], asset_id)
 
-    if answers.faces:
-        await _assign_faces(client, asset_id, answers)
+    await _add_to_albums(client, asset_id, answers)
 
-    if answers.person_ids:
+    persons = _PersonsByName(client)
+    if answers.faces:
+        await _assign_faces(client, asset_id, answers, persons)
+
+    if answers.person_ids or answers.new_people:
         width = asset.get("width") or exif.get("exifImageWidth")
         height = asset.get("height") or exif.get("exifImageHeight")
         if not width or not height:
             raise InvalidInput("Die Bildgröße ist unbekannt, Personen können nicht zugeordnet werden.")
+        person_ids = list(answers.person_ids)
+        for name in answers.new_people:
+            person_ids.append(await persons.id_for(name))
         present = await client.face_person_ids(asset_id)
-        for person_id in dict.fromkeys(answers.person_ids):
+        for person_id in dict.fromkeys(person_ids):
             if person_id not in present:
                 await client.add_face(full_image_face(asset_id, person_id, int(width), int(height)))
 
