@@ -48,6 +48,8 @@ class SaveRequest(BaseModel):
     person_ids: list[str] = Field(default_factory=list)
     new_people: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=50)
     tag_values: list[str] = Field(default_factory=list, max_length=100)
+    album_ids: list[Annotated[str, Field(pattern=UUID)]] = Field(default_factory=list, max_length=50)
+    new_albums: list[Annotated[str, Field(max_length=300)]] = Field(default_factory=list, max_length=20)
     faces: list[FaceRequest] = Field(default_factory=list, max_length=100)
 
 
@@ -149,7 +151,9 @@ def create_app(
 
     @app.get("/api/assets/{asset_id}")
     async def asset(asset_id: str = PathParam(pattern=UUID)):
-        data, faces = await asyncio.gather(immich.get_asset(asset_id), immich.faces(asset_id))
+        data, faces, albums = await asyncio.gather(
+            immich.get_asset(asset_id), immich.faces(asset_id), immich.albums(asset_id)
+        )
         exif = data.get("exifInfo") or {}
         return {
             "id": data["id"],
@@ -159,6 +163,7 @@ def create_app(
             "personIds": [p["id"] for p in data.get("people") or []],
             "tagValues": [t["value"] for t in data.get("tags") or [] if visible(t)],
             "faces": face_boxes(faces),
+            "albumIds": [a["id"] for a in albums],
         }
 
     @app.get("/api/assets/{asset_id}/preview")
@@ -182,6 +187,10 @@ def create_app(
             media_type=upstream.headers.get("content-type", "image/jpeg"),
             headers={"Cache-Control": "private, max-age=86400"},
         )
+
+    @app.get("/api/albums")
+    async def albums():
+        return [{"id": a["id"], "name": a["albumName"], "count": a.get("assetCount", 0)} for a in await immich.albums()]
 
     @app.get("/api/places")
     async def places(q: str = ""):

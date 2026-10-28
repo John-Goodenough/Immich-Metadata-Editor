@@ -239,3 +239,30 @@ async def test_new_people_without_face_get_whole_image_face(mock, client):
     assert create.call_count == 1 and body(create.calls.last) == {"name": "Onkel Fritz"}
     assert [body(c)["personId"] for c in whole.calls] == [NEW_PERSON, PERSON_A]
     assert untag.called
+
+
+ALBUM_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+ALBUM_B = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+
+
+async def test_albums_existing_new_and_retry(mock, client):
+    untag = save_mocks(mock, [])
+    mock.get("/albums").respond(json=[{"id": ALBUM_B, "albumName": "Urlaub 1970"}])
+    add_a = mock.put(f"/albums/{ALBUM_A}/assets").respond(json=[{"id": ASSET, "success": False, "error": "duplicate"}])
+    add_b = mock.put(f"/albums/{ALBUM_B}/assets").respond(json=[{"id": ASSET, "success": True}])
+    create = mock.post("/albums").respond(201, json={"id": "neu"})
+    answers = Answers(album_ids=[ALBUM_A], new_albums=[" Hochzeit  Erna ", "urlaub 1970"])
+    await save_answers(client, ASSET, answers, **SAVE)
+    # vorhandenes Album gleichen Namens wird benutzt, nur das wirklich neue angelegt
+    assert create.call_count == 1
+    assert body(create.calls.last) == {"albumName": "Hochzeit Erna", "assetIds": [ASSET]}
+    assert body(add_a.calls.last) == {"ids": [ASSET]} and add_b.called
+    assert untag.called
+
+
+async def test_album_without_permission_keeps_work_tag(mock, client):
+    untag = save_mocks(mock, [])
+    mock.put(f"/albums/{ALBUM_A}/assets").respond(json=[{"id": ASSET, "success": False, "error": "no_permission"}])
+    with pytest.raises(ImmichError):
+        await save_answers(client, ASSET, Answers(album_ids=[ALBUM_A]), **SAVE)
+    assert not untag.called

@@ -36,6 +36,8 @@ class Answers:
     person_ids: list[str] = field(default_factory=list)
     new_people: list[str] = field(default_factory=list)
     tag_values: list[str] = field(default_factory=list)
+    album_ids: list[str] = field(default_factory=list)
+    new_albums: list[str] = field(default_factory=list)
     faces: list[FaceAnswer] = field(default_factory=list)
 
 
@@ -133,6 +135,16 @@ def full_image_face(asset_id: str, person_id: str, width: int, height: int) -> d
         "width": width,
         "height": height,
     }
+
+
+def normalize_album_name(name: str) -> str:
+    """Name eines neuen Albums säubern: Leerraum zusammenziehen, nicht leer."""
+    name = " ".join(name.split())
+    if not name:
+        raise InvalidInput("Ein neues Album hat keinen Namen.")
+    if len(name) > 200:
+        raise InvalidInput("Ein Albumname ist zu lang.")
+    return name
 
 
 def normalize_person_name(name: str) -> str:

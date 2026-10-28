@@ -39,8 +39,8 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
 ## Funktionen
 
 - Arbeitet eine Liste ab: alle Bilder mit dem Tag `Dia-Nachpflege` (Name einstellbar), eins nach dem anderen.
-- Fünf kurze Fragen pro Bild, jede überspringbar:
-  **Wann?** · **Wo?** · **Was ist zu sehen?** · **Wer ist darauf?** · **Welche Themen?**
+- Sechs kurze Fragen pro Bild, jede überspringbar:
+  **Wann?** · **Wo?** · **Was ist zu sehen?** · **Wer ist darauf?** · **Welche Themen?** · **Welches Album?**
   Reihenfolge und Auswahl der Fragen lassen sich in der Oberfläche einstellen.
 - Datum auch ungefähr („Irgendwann in den 60ern“, „nur das Jahr“).
 - Ortssuche über OpenStreetMap. Von Immich erkannte Gesichter werden einzeln benannt (auch mit neuen Personen),
@@ -103,6 +103,9 @@ Konto gehören, dem die Bilder gehören. Es reichen diese Rechte:
 | `face.create` | Person ohne erkanntes Gesicht einem Bild zuordnen |
 | `face.update` | erkanntes Gesicht einer Person zuordnen |
 | `person.create` | neue Person anlegen |
+| `album.read` | Alben auflisten |
+| `album.create` | neues Album anlegen |
+| `albumAsset.create` | Bild in ein Album legen |
 
 ### 3. `.env` ausfüllen
 
@@ -151,21 +154,26 @@ Immich-Handy-App braucht.
    - **Themen:** Themen antippen. „›“ zeigt Unterthemen, oben zeigt die Pfadleiste („Alle Themen › Urlaub › Italien“),
      wo man gerade ist. „+ Neues Thema“ legt ein Thema auf der aktuellen Ebene an. Über **„Thema suchen …“**
      werden Themen aus allen Ebenen gefunden. Gibt es das gesuchte Thema nicht, lässt es sich direkt anlegen.
+   - **Album:** Alben antippen, mehrere sind möglich. Alben, in denen das Foto schon ist, sind als „schon drin“
+     markiert. Über das Suchfeld wird gesucht; gibt es das Album nicht, legt **„+ Album … neu anlegen“** es an.
    - **Fertig:** Zusammenfassung prüfen und **Speichern ✔**.
 3. **„Dieses Bild später“** (oben rechts) überspringt ein Bild, ohne etwas zu speichern. Es kommt beim nächsten
    Start wieder. Am Ende holt **„Von vorne anfangen“** die übersprungenen Bilder sofort zurück.
 
-**Zurück** geht immer, auch mit der Esc-Taste. Oben steht der Fortschritt („Bild 12 von 340“).
+**Zurück** geht immer, auch mit der Esc-Taste. Ein Klick auf einen Schritt in der Leiste oben (Wann?, Wo?, …)
+springt direkt zu dieser Frage; „Zurück“ führt danach wieder dorthin, wo man vorher war. Oben steht der Fortschritt („Bild 12 von 340“).
 Der Knopf **„Vollbild“** oben rechts schaltet den Browser in den Vollbildmodus und wieder zurück.
 
 Fährt die Maus über das Bild, erscheint unten rechts **„Bild groß“**. Es zeigt das Bild über den ganzen
 Bildschirm; **Schließen**, ein Klick ins Bild oder Esc führt zurück. Antippen des Bildes geht auch.
 Die Oberfläche ist für Bildschirme ab **1280 × 720** ausgelegt.
 
-**Fragen einstellen:** Auf der Startseite (und am Ende) führt **„⚙ Fragen einstellen“** zu einer Liste der fünf
+**Fragen einstellen:** Auf der Startseite (und am Ende) führt **„⚙ Fragen einstellen“** zu einer Liste der sechs
 Fragen. Antippen schaltet eine Frage ein oder aus, mit ↑ und ↓ wird die Reihenfolge geändert, mindestens eine
 Frage bleibt eingeschaltet. Die Einstellung gilt für alle Bilder und wird in `ablauf.json` im Programmordner
-gespeichert (bleibt bei Updates erhalten). Ausgeblendete Fragen ändern in Immich nichts.
+gespeichert (bleibt bei Updates erhalten). Ausgeblendete Fragen ändern in Immich nichts. Wurde der Ablauf schon
+einmal gespeichert, stehen neu hinzugekommene Fragen (z. B. „Album“) dort ausgeschaltet am Ende und müssen einmal
+eingeschaltet werden.
 
 Knöpfe sind hellblau gefüllt, der jeweils wichtigste Knopf dunkelblau („Weiter“) bzw. grün („Speichern“).
 Ausgewähltes ist grün mit Haken. Eingabefelder sind weiß mit dunklem Rand. Das Feld, in dem gerade
@@ -186,6 +194,7 @@ getippt wird, ist gelb hinterlegt und orange umrandet.
 | Erkanntes Gesicht benannt | das Gesicht wird der Person zugeordnet (`PUT /faces/{personId}`), neue Namen werden vorher als Person angelegt |
 | Weitere Personen | manuelles Gesicht mit Rahmen über das **ganze Bild** (siehe [Grenzen](#bekannte-grenzen)) |
 | Themen | Tags am Bild. Neue Themen werden erst beim Speichern angelegt, samt fehlender Oberthemen |
+| Album | Bild wird ins Album gelegt (`PUT /albums/{id}/assets`). Neue Alben entstehen erst beim Speichern (`POST /albums`); gibt es den Namen schon, wird das vorhandene Album genommen |
 | immer | Tag `Dia-bearbeitet`, danach wird `Dia-Nachpflege` entfernt |
 
 12:00 Uhr verhindert, dass das Datum durch Zeitzonen-Umrechnung auf den Nachbartag rutscht.
@@ -273,6 +282,7 @@ Ermittelt aus der OpenAPI-Spezifikation (`x-immich-permission`) und dem Server-Q
 | Personen | `GET /people`, `GET /people/{id}/thumbnail` |
 | Gesichter | `GET /faces?id=…`, `POST /faces`, `PUT /faces/{personId}` mit `{"id": <Gesicht>}` |
 | Neue Person | `POST /people` |
+| Alben | `GET /albums` (mit `assetId`: Alben des Bildes), `POST /albums`, `PUT /albums/{id}/assets` |
 
 Die Felder `tagIds` und `page` auf oberster Ebene von `/search/metadata` sind seit v3.2.0 veraltet und werden nicht
 verwendet. Immich prüft die Rechte eines API-Schlüssels pro Endpunkt, innerhalb der Dienste nur noch die

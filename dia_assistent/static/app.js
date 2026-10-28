@@ -6,17 +6,18 @@ const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
   "August", "September", "Oktober", "November", "Dezember"];
 const STEP_OF = {
   decade: "when", year: "when", month: "when", day: "when", certainty: "when",
-  place: "where", what: "what", face: "who", who: "who", tags: "tags", newtag: "tags", summary: "done",
+  place: "where", what: "what", face: "who", who: "who", tags: "tags", newtag: "tags", album: "album", summary: "done",
 };
 // Fragen-Blöcke: Reihenfolge und Sichtbarkeit kommen aus den Einstellungen
-const ALL_STEPS = ["when", "where", "what", "who", "tags"];
-const STEP_LABEL = { when: "Wann?", where: "Wo?", what: "Was?", who: "Wer?", tags: "Themen" };
+const ALL_STEPS = ["when", "where", "what", "who", "tags", "album"];
+const STEP_LABEL = { when: "Wann?", where: "Wo?", what: "Was?", who: "Wer?", tags: "Themen", album: "Album" };
 const STEP_TEXT = {
   when: "Wann? – Datum", where: "Wo? – Ort", what: "Was? – Beschreibung",
-  who: "Wer? – Personen", tags: "Themen",
+  who: "Wer? – Personen", tags: "Themen", album: "Album",
 };
-const STEP_SCREEN = { when: "decade", where: "place", what: "what", who: "face:0", tags: "tags" };
+const STEP_SCREEN = { when: "decade", where: "place", what: "what", who: "face:0", tags: "tags", album: "album" };
 const PEOPLE_PER_PAGE = 6;
+const ALBUMS_PER_PAGE = 6;
 const FACE_PEOPLE_PER_PAGE = 4;
 const TAG_ROW = 64 + 10; // Zeilenhöhe + Abstand, passend zu .tag-list in app.css
 const DRAFT_KEY = "dia-assistent-entwurf";
@@ -30,6 +31,9 @@ const state = {
   saved: 0,
   skipped: 0,
   people: null,
+  albums: null,
+  albumPage: 0,
+  albumFilter: "",
   asset: null,
   answers: null,
   screen: null,
@@ -51,6 +55,7 @@ function freshAnswers() {
     year: null, month: null, day: null, approximate: false,
     latitude: null, longitude: null, placeName: null, placeTag: null,
     description: "", person_ids: [], new_people: [], tag_values: [],
+    album_ids: [], new_albums: [],
     faces: {}, // Gesichts-ID -> { person_id } oder { new_name }
   };
 }
@@ -197,9 +202,19 @@ function goAfter(step) {
 }
 
 // Fortschrittsleiste oben passend zum eingestellten Ablauf aufbauen
+// Ein Klick auf einen Schritt springt direkt dorthin; „Zurück“ führt wieder zur vorigen Frage.
 function buildStepList() {
-  $("steps").replaceChildren(...[...state.settings.steps, "done"].map((step) =>
-    el("li", { "data-step": step }, step === "done" ? "Fertig" : STEP_LABEL[step])));
+  $("steps").replaceChildren(...[...state.settings.steps, "done"].map((step) => {
+    const label = step === "done" ? "Fertig" : STEP_LABEL[step];
+    return el("li", { "data-step": step }, el("button", {
+      type: "button",
+      title: `Zu „${label}“ springen`,
+      onclick: () => {
+        const target = step === "done" ? "summary" : STEP_SCREEN[step];
+        if (STEP_OF[screenName()] !== step) go(target);
+      },
+    }, label));
+  }));
 }
 
 function back() {
@@ -466,6 +481,93 @@ const SCREENS = {
     update();
   },
 
+  async album() {
+    const a = state.answers;
+    const c = frame({
+      question: "In welches Album gehört das Foto?",
+      hint: "Antippen zum Auswählen, mehrere sind möglich.",
+      next: () => goAfter("album"),
+    });
+    if (state.albums === null) {
+      c.append(el("p", {}, "Alben werden geladen …"));
+      try {
+        state.albums = await api("/api/albums");
+      } catch (err) {
+        c.replaceChildren();
+        showError(err.message, () => render());
+        return;
+      }
+      if (state.screen !== "album") return;
+      c.replaceChildren();
+    }
+
+    const sameName = (x, y) => x.toLocaleLowerCase("de") === y.toLocaleLowerCase("de");
+    const already = new Set(state.asset.albumIds);
+    const filter = el("input", { type: "text", placeholder: "Album suchen oder neu eintippen …", autocomplete: "off", maxlength: "200", value: state.albumFilter });
+    const addNew = () => {
+      const name = cleanName(filter.value);
+      if (!name || a.new_albums.some((n) => sameName(n, name))) return;
+      a.new_albums.push(name);
+      state.albumFilter = "";
+      render();
+    };
+    const create = button("", addNew, "btn-good face-new");
+    const grid = el("div", { class: "grid cols-2 albums" });
+    const pager = el("div", { class: "row" });
+    const draw = () => {
+      const q = cleanName(state.albumFilter).toLocaleLowerCase("de");
+      const list = state.albums.filter((al) => al.name.toLocaleLowerCase("de").includes(q));
+      const pages = Math.max(1, Math.ceil(list.length / ALBUMS_PER_PAGE));
+      state.albumPage = Math.min(state.albumPage, pages - 1);
+      grid.replaceChildren();
+      if (!list.length) grid.append(el("p", {}, state.albums.length ? "Kein Album mit diesem Namen." : "In Immich gibt es noch keine Alben."));
+      for (const al of list.slice(state.albumPage * ALBUMS_PER_PAGE, (state.albumPage + 1) * ALBUMS_PER_PAGE)) {
+        const locked = already.has(al.id);
+        const chosen = locked || a.album_ids.includes(al.id);
+        grid.append(el("button", {
+          type: "button",
+          class: `btn album-toggle${chosen ? " selected" : ""}`,
+          "aria-pressed": String(chosen),
+          disabled: locked,
+          title: locked ? "Das Foto ist schon in diesem Album" : al.name,
+          onclick: () => {
+            const i = a.album_ids.indexOf(al.id);
+            if (i >= 0) a.album_ids.splice(i, 1); else a.album_ids.push(al.id);
+            saveDraft();
+            draw();
+          },
+        }, el("span", {}, al.name), el("small", {}, locked ? "schon drin" : `${al.count} Fotos`)));
+      }
+      pager.replaceChildren();
+      if (pages > 1) {
+        const prev = button("← Vorherige", () => { state.albumPage--; draw(); }, "btn-quiet");
+        const next = button("Weitere →", () => { state.albumPage++; draw(); }, "btn-quiet");
+        prev.disabled = state.albumPage === 0;
+        next.disabled = state.albumPage >= pages - 1;
+        pager.append(prev, el("span", { class: "page-info", style: "align-self:center" }, `Seite ${state.albumPage + 1} von ${pages}`), next);
+      }
+    };
+    const update = () => {
+      const name = cleanName(filter.value);
+      create.hidden = !name || [...state.albums.map((al) => al.name), ...a.new_albums].some((n) => sameName(n, name));
+      create.textContent = `+ Album „${name}“ neu anlegen`;
+    };
+    filter.addEventListener("input", () => { state.albumFilter = filter.value; state.albumPage = 0; draw(); update(); });
+    filter.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || create.hidden) return;
+      e.preventDefault();
+      addNew();
+    });
+    c.append(filter, create);
+    if (a.new_albums.length) {
+      c.append(el("div", { class: "row new-people" }, ...a.new_albums.map((name, i) =>
+        button(`${name} (neu) ✕`, () => { a.new_albums.splice(i, 1); render(); }, "btn-quiet new-person"))));
+    }
+    c.append(grid, pager);
+    draw();
+    update();
+  },
+
   summary() {
     const a = state.answers;
     const c = frame({
@@ -485,6 +587,7 @@ const SCREENS = {
       what: ["Was:", a.description.trim() || "nicht angegeben"],
       who: ["Wer:", names.length ? names.join(", ") : "nicht angegeben"],
       tags: ["Themen:", a.tag_values.length ? a.tag_values.map(tagLabel).join(", ") : "nicht angegeben"],
+      album: ["Album:", albumNames(a).length ? albumNames(a).join(", ") : "nicht angegeben"],
     };
     c.append(el("dl", { class: "summary" },
       state.settings.steps.flatMap((step) => [el("dt", {}, rows[step][0]), el("dd", {}, rows[step][1])])));
@@ -686,6 +789,13 @@ function personName(id) {
   return (state.people || []).find((p) => p.id === id)?.name;
 }
 
+function albumNames(a) {
+  return [
+    ...a.album_ids.map((id) => (state.albums || []).find((al) => al.id === id)?.name).filter(Boolean),
+    ...a.new_albums.map((n) => `${n} (neu)`),
+  ];
+}
+
 function cleanName(text) {
   return text.split(/\s+/).filter(Boolean).join(" ");
 }
@@ -817,6 +927,7 @@ async function saveCurrent() {
     ...(on.has("what") ? {} : { description: "" }),
     ...(on.has("who") ? {} : { person_ids: [], new_people: [], faces: {} }),
     ...(on.has("tags") ? {} : { tag_values: [] }),
+    ...(on.has("album") ? {} : { album_ids: [], new_albums: [] }),
   };
   busy(true, "Wird gespeichert …");
   try {
@@ -827,6 +938,7 @@ async function saveCurrent() {
         year: a.year, month: a.month, day: a.day, approximate: a.approximate,
         latitude: a.latitude, longitude: a.longitude, place_tag: a.placeTag ?? null,
         description: a.description, person_ids: a.person_ids, new_people: a.new_people, tag_values: a.tag_values,
+        album_ids: a.album_ids, new_albums: a.new_albums,
         faces: Object.entries(a.faces).map(([face_id, v]) => ({ face_id, ...v })),
       }),
     });
@@ -838,6 +950,9 @@ async function saveCurrent() {
   }
   busy(false);
   dropDraft();
+  // Neu angelegte Personen und Alben sollen beim nächsten Bild in der Auswahl stehen
+  if (a.new_people.length || Object.values(a.faces).some((v) => v.new_name)) state.people = null;
+  if (a.new_albums.length) state.albums = null;
   state.saved++;
   state.index++;
   openImage();
@@ -871,6 +986,8 @@ async function openImage(draft = null) {
   state.placeResults = [];
   state.peoplePage = 0;
   state.peopleFilter = "";
+  state.albumPage = 0;
+  state.albumFilter = "";
   state.tagPath = [];
   state.tagPage = 0;
   state.tagQuery = "";

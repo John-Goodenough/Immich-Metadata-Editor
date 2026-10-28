@@ -56,10 +56,29 @@ def test_asset_includes_faces():
         "id": "f1", "imageWidth": 200, "imageHeight": 100, "boundingBoxX1": 20, "boundingBoxX2": 60,
         "boundingBoxY1": 10, "boundingBoxY2": 50, "sourceType": "machine-learning", "person": None,
     }])
+    respx.get(f"{API}/albums", params={"assetId": ASSET}).respond(json=[
+        {"id": "a2", "albumName": "Urlaub"}, {"id": "a1", "albumName": "familie"}])
     with make_client() as c:
-        faces = c.get(f"/api/assets/{ASSET}").json()["faces"]
+        data = c.get(f"/api/assets/{ASSET}").json()
+    faces = data["faces"]
+    assert data["albumIds"] == ["a1", "a2"]
     assert faces == [{"id": "f1", "x": 0.1, "y": 0.1, "w": 0.2, "h": 0.4, "aspect": 2.0,
                       "personId": None, "personName": None}]
+
+
+@respx.mock
+def test_album_list():
+    respx.get(f"{API}/albums").respond(json=[
+        {"id": "a2", "albumName": "Urlaub 1970", "assetCount": 12}, {"id": "a1", "albumName": "Familie"}])
+    with make_client() as c:
+        assert c.get("/api/albums").json() == [
+            {"id": "a1", "name": "Familie", "count": 0}, {"id": "a2", "name": "Urlaub 1970", "count": 12}]
+
+
+def test_save_rejects_bad_album_id():
+    with make_client() as c:
+        r = c.post(f"/api/assets/{ASSET}/save", json={"album_ids": ["../x"]})
+    assert r.status_code in (400, 422)
 
 
 def test_save_rejects_bad_face_id():
@@ -168,7 +187,7 @@ def test_settings_report_build():
 def test_steps_default_and_saved(tmp_path):
     path = tmp_path / "ablauf.json"
     with make_client(steps_file=path) as c:
-        assert c.get("/api/settings").json()["steps"] == ["when", "where", "what", "who", "tags"]
+        assert c.get("/api/settings").json()["steps"] == ["when", "where", "what", "who", "tags", "album"]
         r = c.put("/api/settings/steps", json={"steps": ["who", "when"]}, headers={"x-dia-assistent": "1"})
         assert r.status_code == 200
         assert c.get("/api/settings").json()["steps"] == ["who", "when"]
@@ -190,4 +209,4 @@ def test_broken_steps_file_falls_back(tmp_path):
     path = tmp_path / "ablauf.json"
     path.write_text("kaputt", encoding="utf-8")
     with make_client(steps_file=path) as c:
-        assert c.get("/api/settings").json()["steps"] == ["when", "where", "what", "who", "tags"]
+        assert c.get("/api/settings").json()["steps"] == ["when", "where", "what", "who", "tags", "album"]

@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import httpx
 
-from .logic import Answers, InvalidInput, build_asset_update, full_image_face, normalize_person_name, tags_to_assign
+from .logic import (
+    Answers,
+    InvalidInput,
+    build_asset_update,
+    full_image_face,
+    normalize_album_name,
+    normalize_person_name,
+    tags_to_assign,
+)
 
 
 class ImmichError(Exception):
@@ -112,6 +120,12 @@ class ImmichClient:
     async def face_person_ids(self, asset_id: str) -> set[str]:
         return {f["person"]["id"] for f in await self.faces(asset_id) if f.get("person")}
 
+    async def albums(self, asset_id: str | None = None) -> list[dict]:
+        """GET /albums, mit asset_id nur die Alben, in denen das Bild schon ist."""
+        params = {"assetId": asset_id} if asset_id else None
+        albums = (await self._request("GET", "/albums", params=params)).json()
+        return sorted(albums, key=lambda a: a["albumName"].casefold())
+
     # --- Schreiben -------------------------------------------------------
 
     async def update_asset(self, asset_id: str, body: dict) -> None:
@@ -134,6 +148,16 @@ class ImmichClient:
             # "duplicate" (schon getaggt) und "not_found" (schon entfernt) sind kein Fehler
             if not item.get("success") and item.get("error") not in ("duplicate", "not_found"):
                 raise ImmichError("Die Markierung konnte nicht geändert werden.")
+
+    async def add_to_album(self, album_id: str, asset_id: str) -> None:
+        results = (await self._request("PUT", f"/albums/{album_id}/assets", json={"ids": [asset_id]})).json()
+        for item in results:
+            # "duplicate": Bild ist schon im Album
+            if not item.get("success") and item.get("error") != "duplicate":
+                raise ImmichError("Das Bild konnte nicht ins Album gelegt werden.")
+
+    async def create_album(self, name: str, asset_id: str) -> None:
+        await self._request("POST", "/albums", json={"albumName": name, "assetIds": [asset_id]})
 
     async def add_face(self, body: dict) -> None:
         await self._request("POST", "/faces", json=body)
@@ -175,6 +199,23 @@ async def _assign_faces(client: ImmichClient, asset_id: str, answers: Answers, p
             await client.reassign_face(answer.face_id, person_id)
 
 
+async def _add_to_albums(client: ImmichClient, asset_id: str, answers: Answers) -> None:
+    """Bild in gewählte Alben legen. Ein neues Album wird nur angelegt, wenn es den Namen noch nicht gibt,
+    damit ein wiederholtes Speichern kein zweites Album erzeugt."""
+    album_ids = list(answers.album_ids)
+    if answers.new_albums:
+        by_name = {a["albumName"].casefold(): a["id"] for a in await client.albums()}
+        for raw in dict.fromkeys(answers.new_albums):
+            name = normalize_album_name(raw)
+            if name.casefold() in by_name:
+                album_ids.append(by_name[name.casefold()])
+            else:
+                await client.create_album(name, asset_id)
+                by_name[name.casefold()] = ""
+    for album_id in dict.fromkeys(album_ids):
+        await client.add_to_album(album_id, asset_id)
+
+
 async def save_answers(
     client: ImmichClient,
     asset_id: str,
@@ -205,6 +246,8 @@ async def save_answers(
         if value not in tag_ids:
             raise ImmichError("Ein Thema konnte nicht angelegt werden.")
         await client.tag_asset(tag_ids[value], asset_id)
+
+    await _add_to_albums(client, asset_id, answers)
 
     persons = _PersonsByName(client)
     if answers.faces:
