@@ -225,6 +225,10 @@ nav#nav .btn { min-width: 220px; }
 .tag-toggle span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-toggle small { font-size: 18px; line-height: 1.2; }
 .tag-toggle.selected span::before { content: "✔ "; color: var(--good); }
+/* Langer Name: beim Drüberfahren (oder Tastaturfokus) wächst der Knopf über die Zeile darunter, ohne die Liste zu verschieben */
+.tag-item { position: relative; }
+.tag-toggle:hover, .tag-toggle:focus-visible { position: relative; align-self: flex-start; min-height: 100%; z-index: 2; }
+.tag-toggle:hover span, .tag-toggle:hover small, .tag-toggle:focus-visible span, .tag-toggle:focus-visible small { white-space: normal; overflow-wrap: anywhere; }
 .tag-open { flex: none; min-width: 72px; min-height: 0; padding: 4px 10px; }
 .tag-open.empty { color: var(--muted); font-weight: 400; }
 .tag-bottom { align-items: center; }
