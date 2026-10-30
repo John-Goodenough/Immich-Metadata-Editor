@@ -165,7 +165,7 @@ springt direkt zu dieser Frage; „Zurück“ führt danach wieder dorthin, wo m
 Der Knopf **„Vollbild“** oben rechts schaltet den Browser in den Vollbildmodus und wieder zurück.
 
 Fährt die Maus über das Bild, erscheint unten rechts **„Bild groß“**. Es zeigt das Bild über den ganzen
-Bildschirm; **Schließen**, ein Klick ins Bild oder Esc führt zurück. Antippen des Bildes geht auch.
+Bildschirm; **„✕ Bild klein“**, ein Klick ins Bild oder Esc führt zurück. Antippen des Bildes geht auch.
 Die Oberfläche ist für Bildschirme ab **1280 × 720** ausgelegt.
 
 **Fragen einstellen:** Auf der Startseite (und am Ende) führt **„⚙ Fragen einstellen“** zu einer Liste der sechs
