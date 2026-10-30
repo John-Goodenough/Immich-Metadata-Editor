@@ -951,9 +951,10 @@ async function saveCurrent() {
   }
   busy(false);
   dropDraft();
-  // Neu angelegte Personen und Alben sollen beim nächsten Bild in der Auswahl stehen
+  // Neu angelegte Personen, Alben und Themen sollen beim nächsten Bild in der Auswahl stehen
   if (a.new_people.length || Object.values(a.faces).some((v) => v.new_name)) state.people = null;
   if (a.new_albums.length) state.albums = null;
+  if (a.tag_values.some((v) => !(state.tags || []).includes(v))) state.tags = null;
   state.saved++;
   state.index++;
   openImage();
