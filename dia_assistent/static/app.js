@@ -157,6 +157,7 @@ function dateText(a) {
 
 function frame({ question, hint = "", back = true, next = null, nextLabel = "Weiter →", photo = true }) {
   clearError();
+  for (const extra of $("nav").querySelectorAll(".nav-extra")) extra.remove();
   $("question").textContent = question;
   $("hint").textContent = hint;
   $("photo-box").hidden = !photo;
@@ -1059,7 +1060,7 @@ function showSettings() {
     photo: false, next: save, nextLabel: "Speichern ✔",
   });
   const list = el("div", { class: "settings-list" });
-  const draw = (focus = null) => {
+  let draw = (focus = null) => {
     list.replaceChildren();
     work.forEach((w, i) => {
       const toggle = el("button", {
@@ -1084,8 +1085,18 @@ function showSettings() {
     });
     if (focus) list.children[focus[0]]?.children[focus[1]]?.focus({ preventScroll: true });
   };
+  // Reicht der Platz nicht, scrollt die Liste; der Hinweis zeigt, dass unten noch etwas kommt
+  const more = el("p", { class: "settings-more" }, "↓ Weitere Fragen: nach unten scrollen");
+  const updateMore = () => { more.hidden = list.scrollTop + list.clientHeight >= list.scrollHeight - 2; };
+  const drawList = draw;
+  draw = (focus) => { drawList(focus); updateMore(); };
+  list.addEventListener("scroll", updateMore);
+  new ResizeObserver(updateMore).observe(list);
   draw();
-  c.append(list, el("div", { class: "row" }, button("Abbrechen", restart, "btn-quiet")));
+  c.append(list, more);
+  updateMore();
+  // „Abbrechen“ unten neben „Speichern“, damit es nie aus dem Bild rutscht
+  $("nav").prepend(button("Abbrechen", restart, "btn-quiet nav-extra"));
 }
 
 function restart() {
