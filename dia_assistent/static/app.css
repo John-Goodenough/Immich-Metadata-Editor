@@ -162,6 +162,10 @@ input[type=text]:focus, textarea:focus {
 }
 textarea { flex: 1; resize: none; min-height: 160px; }
 
+.place-search > input { min-width: 0; }
+.place-search > .btn { flex: none; }
+/* Treffer scrollen, wenn der Platz nicht für alle reicht */
+#place-results { min-height: 0; overflow-y: auto; padding: 6px; margin: -6px; }
 .place-result { text-align: left; min-width: 0; padding-top: 4px; padding-bottom: 4px; }
 /* Art des Ortes (Stadt, Kreis, Land …) als Etikett hinter dem Namen */
 .place-name { display: flex; align-items: center; gap: 12px; min-width: 0; }

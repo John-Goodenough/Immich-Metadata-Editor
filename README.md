@@ -137,7 +137,7 @@ Immich-Handy-App braucht.
 1. Starter doppelklicken. Der Browser öffnet sich mit „Guten Tag! Es warten N Bilder auf Sie.“
 2. Zu jedem Bild nacheinander:
    - **Wann?** Jahrzehnt → Jahr → Monat → Tag, jeweils mit „Weiß ich nicht“, danach „Ganz sicher“ oder „Nur ungefähr“.
-   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
+   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen. „Weiß ich nicht“ überspringt die Frage. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
      Stadtteil, Kreis, Bundesland, Land …), damit z. B. die Stadt Kassel und der Landkreis Kassel unterscheidbar sind.
      Der gewählte Ort wird zusätzlich als Tag `Kontinent/Land/Ort` gespeichert, z. B. `Europa/Deutschland/Kassel`
      (bei einem Land nur `Europa/Deutschland`). Verwaltungszusätze wie „Landkreis“, „Kreis“ oder

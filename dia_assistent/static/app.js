@@ -329,7 +329,11 @@ const SCREENS = {
       }
     };
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
-    c.append(el("div", { class: "row" }, input, button("Suchen", search, "btn-primary")));
+    const unknown = button("Weiß ich nicht", () => {
+      Object.assign(a, { latitude: null, longitude: null, placeName: null, placeTag: null });
+      goAfter("where");
+    });
+    c.append(el("div", { class: "row place-search" }, input, button("Suchen", search, "btn-primary"), unknown));
     if (a.placeName) {
       c.append(el("div", { class: "chosen" }, `Gewählt: ${a.placeName} `,
         button("Entfernen", () => {
