@@ -4,6 +4,8 @@ Eine **seniorengerechte, geführte Oberfläche**, mit der sich gescannte Dias (o
 [Immich](https://immich.app) nachträglich beschriften lassen: Datum, Ort, Beschreibung, Personen und Themen.
 Eine Frage pro Bildschirm, große Schrift, große Knöpfe, kein Fachjargon.
 
+![Der Assistent fragt, wer auf dem Dia zu sehen ist](docs/bilder/wer-bestaetigen.png)
+
 *German-language tool: a simple, guided UI for elderly users to add date, place, description, people and
 tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
 
@@ -26,7 +28,7 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
 - [Funktionen](#funktionen)
 - [Installation](#installation)
 - [Einrichtung](#einrichtung)
-- [Bedienung](#bedienung)
+- [Bedienung](#bedienung) – mit Bildern zu jedem Schritt
 - [Was genau gespeichert wird](#was-genau-gespeichert-wird)
 - [Update und Fehlersuche](#update-und-fehlersuche)
 - [Bekannte Grenzen](#bekannte-grenzen)
@@ -40,15 +42,17 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
 
 - Arbeitet eine Liste ab: alle Bilder mit dem Tag `Dia-Nachpflege` (Name einstellbar), eins nach dem anderen.
 - Sechs kurze Fragen pro Bild, jede überspringbar:
-  **Wann?** · **Wo?** · **Was ist zu sehen?** · **Wer ist darauf?** · **Welche Themen?** · **Welches Album?**
-  Reihenfolge und Auswahl der Fragen lassen sich in der Oberfläche einstellen.
-- Datum auch ungefähr („Irgendwann in den 60ern“, „nur das Jahr“).
-- Ortssuche über OpenStreetMap. Von Immich erkannte Gesichter werden einzeln benannt (auch mit neuen Personen),
-  weitere Personen per Fotoknopf. Themen (Immich-Tags) mit Unterthemen und Suche.
-- Bild per Knopf „Bild groß“ bildschirmfüllend ansehen.
-- Ruhige, kontrastreiche Gestaltung (warmer Papierton, Text mindestens 19 px, große Knöpfe), Vollbild-Knopf
-  schon auf der Startseite. Unten stehen auf jeder Frage an derselben Stelle „← Zurück“, „Weiß ich nicht“ und „Weiter →“.
-- Speichert nur, was ausgefüllt wurde. Nichts wird gelöscht.
+  **Wann?** · **Wo?** · **Wer ist darauf?** · **Welche Themen?** · **Was ist zu sehen?** · **Welches Album?**
+  Reihenfolge und Auswahl lassen sich in der Oberfläche einstellen.
+- Datum auch ungefähr („Irgendwann in den 60ern“, nur das Jahr, „Nur ungefähr“).
+- Ortssuche über OpenStreetMap; der Ort wird zusätzlich als Tag `Kontinent/Land/Ort` gespeichert.
+- Jedes von Immich erkannte Gesicht wird einzeln abgefragt, auch schon zugeordnete („Ist das …?“).
+  Weitere Personen ohne erkanntes Gesicht lassen sich dazuwählen oder neu anlegen.
+- Themen (Immich-Tags) mit Unterthemen, Suche und Anlegen neuer Themen samt Überthema; Alben auswählen oder neu anlegen.
+- Gestaltung für ältere Menschen: warmer Papierton statt grellem Weiß, hoher Kontrast, Lesetext mindestens 19 px
+  (nur die Schrittleiste ist kleiner), Antwortknöpfe mindestens 56 px hoch. „← Zurück“, „Weiß ich nicht“ und „Weiter →“ stehen immer an derselben Stelle.
+  Bedienbar mit Maus, Tastatur oder Touch, ab 1024 × 600 Bildpunkten.
+- Speichert nur, was ausgefüllt wurde, und löscht nichts in Immich.
 - Bearbeitete Bilder bekommen den Tag `Dia-bearbeitet`, damit sich der Fortschritt zählen lässt.
 - Läuft lokal auf `127.0.0.1`. Der Immich-API-Schlüssel bleibt im lokalen Programm und gelangt nie in den Browser.
 
@@ -135,59 +139,122 @@ Immich-Handy-App braucht.
 
 ## Bedienung
 
-1. Starter doppelklicken. Der Browser öffnet sich mit „Guten Tag! N Bilder warten darauf, beschriftet zu werden.“
-   Dort gibt es auch „Fragen einstellen“ und „Vollbild“.
-2. Zu jedem Bild nacheinander:
-   - **Wann?** Jahrzehnt → Jahr → Monat → Tag, „Weiß ich nicht“ steht unten in der Leiste, danach „Ganz sicher“ oder „Nur ungefähr“.
-   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen, mit „Weiter“ bestätigen. „Weiß ich nicht“ überspringt die Frage. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
-     Stadtteil, Kreis, Bundesland, Land …), damit z. B. die Stadt Kassel und der Landkreis Kassel unterscheidbar sind.
-     Der gewählte Ort wird zusätzlich als Tag `Kontinent/Land/Ort` gespeichert, z. B. `Europa/Deutschland/Kassel`
-     (bei einem Land nur `Europa/Deutschland`). Verwaltungszusätze wie „Landkreis“, „Kreis“ oder
-     „Regierungsbezirk“ vor dem Namen fallen weg, Stadt und Landkreis Kassel bekommen also beide `…/Kassel`. Der Kontinent ergibt sich aus dem Ländercode; Grundlage ist die
-     UN-Einteilung, Mittelamerika und Karibik zählen zu Nordamerika, Zypern und Russland zu Europa, die Türkei zu
-     Asien. Orts-Tags erscheinen nicht in der Themenliste.
-   - **Was?** Ein paar Worte zum Bild.
-   - **Wer?** Hat Immich Gesichter erkannt, kommt jedes einzeln: Das Gesicht ist im Bild orange umrandet und
-     daneben vergrößert. Hat Immich dem Gesicht schon eine Person zugeordnet, fragt der Assistent „Ist das …?“ mit
-     **„Ja, das ist …“**, **„Nein, jemand anderes“** und „Weiß ich nicht“ („Ja“ und „Weiß ich nicht“ lassen die Zuordnung
-     in Immich, wie sie ist). Sonst, oder nach „Nein, jemand anderes“: Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
-     **„+ … neu anlegen“** die Person an. „Weiß ich nicht“ geht zum nächsten Gesicht. Jede Antwort springt gleich zum nächsten Gesicht.
-     Personen, die schon an einem anderen Gesicht hängen, stehen nicht mehr in der Liste. Danach (oder wenn kein
-     Gesicht erkannt wurde) weitere Personen antippen, deren Gesicht nicht umrandet war, z. B. weil sie mit dem
-     Rücken zur Kamera stehen. Wer dort nicht zu finden ist, wird über das Suchfeld mit **„+ … neu anlegen“**
-     als neue Person angelegt. Der Knopf rechts unten zeigt „Niemand sonst →“ oder „Weiter (2 gewählt) →“.
-   - **Themen:** Themen antippen, die Auswahl steht oben als Chips (✕ entfernt). Nur Themen mit Unterthemen haben rechts
-     einen Teil „3 ›“, der die Unterthemen zeigt. Oben zeigt die Pfadleiste („Alle Themen › Urlaub › Italien“),
-     wo man gerade ist. Über **„Thema suchen oder neu eintippen …“** werden Themen aus allen Ebenen gefunden. Gibt es
-     das Thema nicht, steht oben **„+ „…“ neu anlegen“**. Danach fragt der Assistent „Wohin gehört …?“: unter dem
-     gerade geöffneten Thema, ohne Überthema, oder ein Überthema antippen bzw. suchen.
-   - **Album:** Alben antippen, mehrere sind möglich. Alben, in denen das Foto schon ist, sind als „schon drin“
-     markiert. Über das Suchfeld wird gesucht; gibt es das Album nicht, legt **„+ „…“ neu anlegen“** es an.
-   - **Fertig:** Zusammenfassung prüfen; „Ändern“ neben jeder Zeile springt zur Frage. Dann **Speichern ✔**.
-     Klappt das Speichern nicht, bleiben alle Angaben stehen und „Noch einmal versuchen“ erscheint.
-3. **„Dieses Bild später“** (oben rechts) überspringt ein Bild, ohne etwas zu speichern. Es kommt beim nächsten
-   Start wieder. Am Ende holt **„Aufgehobene Bilder jetzt ansehen“** die übersprungenen Bilder sofort zurück.
+Die Bilder in diesem Abschnitt zeigen ein gezeichnetes Beispiel-Dia mit erfundenen Namen.
 
-**Zurück** geht immer, auch mit der Esc-Taste (steht Text im Suchfeld, leert Esc zuerst das Feld). Ein Klick auf einen Schritt in der Leiste oben (Wann?, Wo?, …; beantwortete Schritte sind grün mit ✔)
-springt direkt zu dieser Frage; „Zurück“ führt danach wieder dorthin, wo man vorher war. Oben steht der Fortschritt („Bild 12 von 340“).
-Der Knopf **„Vollbild“** oben rechts schaltet den Browser in den Vollbildmodus und wieder zurück.
+### Start
 
-**„Bild groß“** unten rechts am Foto zeigt das Bild über den ganzen
-Bildschirm; **„✕ Bild klein“**, ein Klick ins Bild oder Esc führt zurück. Antippen des Bildes geht auch.
-Die Oberfläche ist für Bildschirme ab **1024 × 600** ausgelegt; unter 700 px Höhe wird sie etwas kompakter, unter
-900 px Breite steht das Foto oben. Listen blättern seitenweise, je nachdem, wie viel Platz ist. Lange Namen werden
-beim Drüberfahren mit der Maus vollständig angezeigt.
+Starter doppelklicken. Der Browser zeigt, wie viele Bilder warten. **„Los geht's“** beginnt mit dem ersten Bild,
+**„Fragen einstellen“** legt fest, welche Fragen in welcher Reihenfolge kommen, **„Vollbild“** schaltet den Browser
+in den Vollbildmodus.
 
-**Fragen einstellen:** Auf der Startseite (und am Ende) führt **„⚙ Fragen einstellen“** zu einer Liste der sechs
-Fragen. Antippen schaltet eine Frage ein oder aus, mit ↑ und ↓ wird die Reihenfolge geändert, mindestens eine
-Frage bleibt eingeschaltet. Die Einstellung gilt für alle Bilder und wird in `ablauf.json` im Programmordner
-gespeichert (bleibt bei Updates erhalten). Ausgeblendete Fragen ändern in Immich nichts. Wurde der Ablauf schon
-einmal gespeichert, stehen neu hinzugekommene Fragen (z. B. „Album“) dort ausgeschaltet am Ende und müssen einmal
-eingeschaltet werden.
+<img src="docs/bilder/start.png" alt="Startseite mit Los geht's, Fragen einstellen und Vollbild" width="70%">
 
-Knöpfe sind hellblau gefüllt, der jeweils wichtigste Knopf dunkelblau („Weiter“) bzw. grün („Speichern“).
-Ausgewähltes ist grün mit Haken. Eingabefelder sind weiß mit dunklem Rand. Das Feld, in dem gerade
-getippt wird, ist gelb hinterlegt und orange umrandet.
+### Aufbau jeder Frage
+
+<img src="docs/bilder/wann.png" alt="Frage Wann wurde das Foto gemacht? mit Jahrzehnten" width="100%">
+
+- **Oben:** Fortschritt („Bild 1 von 11“), **„Dieses Bild später“** (überspringt das Bild ohne zu speichern; es
+  kommt beim nächsten Start wieder) und **„Vollbild“**.
+- **Links:** das Dia. **„Bild groß“** zeigt es bildschirmfüllend; „✕ Bild klein“, ein Klick oder Esc führt zurück.
+- **Rechts oben:** die Schrittleiste. Der aktuelle Schritt ist blau, beantwortete Schritte sind grün mit ✔.
+  Ein Klick springt direkt zu dieser Frage.
+- **Rechts unten, immer an derselben Stelle:** **„← Zurück“** (auch mit Esc), **„Weiß ich nicht“** und **„Weiter →“**.
+
+### Wann?
+
+Jahrzehnt → Jahr → Monat → Tag, danach „Ganz sicher“ oder „Nur ungefähr“. Wer nur das Jahrzehnt weiß, nimmt
+„Irgendwann in den 60ern“. „Weiß ich nicht“ beendet die Frage an der Stelle, an der man nicht weiterweiß.
+
+### Wo?
+
+Ort eintippen, **„Suchen“**, Treffer antippen und mit „Weiter“ bestätigen. Jeder Treffer zeigt, was er ist
+(Stadt, Kreis, Ortsteil, Land …), damit z. B. die Stadt Kassel und der Landkreis Kassel unterscheidbar sind.
+Was bisher in Immich steht, wird oben angezeigt.
+
+<img src="docs/bilder/wo.png" alt="Ortssuche mit drei Treffern für Kassel" width="100%">
+
+Der Ort wird zusätzlich als Tag `Kontinent/Land/Ort` gespeichert, z. B. `Europa/Deutschland/Kassel` (bei einem Land
+nur `Europa/Deutschland`). Zusätze wie „Landkreis“, „Kreis“ oder „Regierungsbezirk“ fallen weg, Stadt und Landkreis
+Kassel bekommen also beide `…/Kassel`. Der Kontinent ergibt sich aus dem Ländercode nach der UN-Einteilung;
+Mittelamerika und Karibik zählen zu Nordamerika, Zypern und Russland zu Europa, die Türkei zu Asien.
+Orts-Tags erscheinen nicht in der Themenliste.
+
+### Wer?
+
+Jedes Gesicht, das Immich erkannt hat, kommt einzeln. Es ist im Dia orange umrandet und neben der Frage vergrößert.
+
+<p>
+<img src="docs/bilder/wer-gesicht.png" alt="Unbekanntes Gesicht: Name eintippen oder Person antippen" width="49%">
+<img src="docs/bilder/wer-bestaetigen.png" alt="Schon zugeordnetes Gesicht: Ist das Walter Becker?" width="49%">
+</p>
+
+- **Gesicht ohne Namen (links):** Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
+  **„+ „…“ neu anlegen“** die Person an.
+- **Gesicht, dem Immich schon jemanden zugeordnet hat (rechts):** **„Ja, das ist …“**, **„Nein, jemand anderes“**
+  (dann kommt die Liste) oder „Weiß ich nicht“. „Ja“ und „Weiß ich nicht“ lassen die Zuordnung in Immich, wie sie ist.
+- Jede Antwort springt gleich zum nächsten Gesicht. Wer schon an einem anderen Gesicht hängt, steht nicht in der Liste.
+
+Danach (oder wenn kein Gesicht erkannt wurde) kommen **weitere Personen**, deren Gesicht nicht umrandet war,
+z. B. weil sie mit dem Rücken zur Kamera stehen. Mehrere sind möglich; neue Personen werden über das Suchfeld
+angelegt. Der Knopf rechts unten zeigt „Niemand sonst →“ oder „Weiter (2 gewählt) →“.
+
+<img src="docs/bilder/wer-noch.png" alt="Wer ist noch auf dem Foto? mit ausgewählten Personen" width="100%">
+
+### Themen
+
+Themen antippen, mehrere sind möglich. Die Auswahl steht oben (✕ entfernt ein Thema). Themen mit Unterthemen
+haben rechts einen Teil wie „4 ›“, der die Unterthemen öffnet; die Pfadleiste („Alle Themen › Familie“) führt zurück.
+Das Suchfeld findet Themen aus allen Ebenen.
+
+<p>
+<img src="docs/bilder/themen.png" alt="Themen der Ebene Familie mit Auswahl" width="49%">
+<img src="docs/bilder/thema-neu.png" alt="Neues Thema Picknick: Wohin gehört es?" width="49%">
+</p>
+
+Gibt es ein Thema noch nicht, steht beim Eintippen oben **„+ „…“ neu anlegen“**. Danach fragt der Assistent
+**„Wohin gehört …?“**: unter dem gerade geöffneten Thema, ohne Überthema, oder ein Überthema antippen bzw. suchen.
+
+### Was?
+
+Ein paar Worte zum Bild in ein Textfeld. Eine vorhandene Beschreibung wird oben angezeigt; der neue Text wird angehängt.
+
+### Album
+
+Alben antippen, mehrere sind möglich. Alben, in denen das Foto schon ist, sind grau mit „schon drin“ markiert.
+Gibt es das gesuchte Album nicht, legt **„+ „…“ neu anlegen“** es an.
+
+<img src="docs/bilder/album.png" alt="Albumauswahl" width="100%">
+
+### Fertig
+
+Die Zusammenfassung zeigt alle Antworten. **„Ändern“** neben jeder Zeile springt zur Frage. **„Speichern ✔“**
+schreibt alles nach Immich und öffnet das nächste Bild. Klappt das Speichern nicht, bleiben alle Angaben stehen,
+und „Noch einmal versuchen“ erscheint.
+
+<img src="docs/bilder/fertig.png" alt="Zusammenfassung Stimmt das so?" width="100%">
+
+Am Ende zeigt „Geschafft!“, wie viele Bilder gespeichert wurden. **„Aufgehobene Bilder jetzt ansehen“** holt
+die mit „Dieses Bild später“ übersprungenen Bilder sofort zurück.
+
+### Fragen einstellen
+
+Auf der Startseite (und am Ende) führt **„Fragen einstellen“** zur Liste der sechs Fragen. Antippen schaltet eine
+Frage ein oder aus, ↑ und ↓ ändern die Reihenfolge; mindestens eine Frage bleibt eingeschaltet. Die Einstellung gilt
+für alle Bilder und steht in `ablauf.json` im Programmordner (bleibt bei Updates erhalten). Ausgeblendete Fragen
+ändern in Immich nichts. Wurde der Ablauf schon einmal gespeichert, stehen neu hinzugekommene Fragen
+(z. B. „Album“) ausgeschaltet am Ende und müssen einmal eingeschaltet werden.
+
+<img src="docs/bilder/einstellungen.png" alt="Fragen einstellen" width="70%">
+
+### Bedienhinweise
+
+- **Tastatur:** Tab wechselt zwischen Knöpfen (orange umrandet), Enter löst aus, Esc geht zurück. Steht Text in
+  einem Suchfeld, leert Esc zuerst das Feld.
+- **Lange Namen** werden gekürzt und beim Drüberfahren mit der Maus vollständig angezeigt. Ohne Maus (Touch)
+  stehen sie immer ganz da.
+- **Kleine Bildschirme:** Unter 700 Bildpunkten Höhe wird alles etwas kompakter, unter 900 Bildpunkten Breite
+  steht das Foto oben. Listen blättern seitenweise („← Vorherige · Seite 1 von 3 · Weitere →“), je nachdem, wie viel Platz ist.
+- **Angefangene Bilder** werden im Browser gesichert. Nach einem Neustart geht es beim selben Bild weiter.
 
 ---
 
@@ -202,6 +269,8 @@ getippt wird, ist gelb hinterlegt und orange umrandet.
 | Ort | Breiten- und Längengrad. Stadt und Land ergänzt Immich daraus selbst (siehe [Technische Details](#technische-details)) |
 | Beschreibung | wird an eine vorhandene Beschreibung **angehängt** |
 | Erkanntes Gesicht benannt | das Gesicht wird der Person zugeordnet (`PUT /faces/{personId}`), neue Namen werden vorher als Person angelegt |
+| „Ja, das ist …“ / „Weiß ich nicht“ bei zugeordnetem Gesicht | nichts, die Zuordnung bleibt |
+| „Nein, jemand anderes“ | das Gesicht wird der neu gewählten Person zugeordnet |
 | Weitere Personen | manuelles Gesicht mit Rahmen über das **ganze Bild** (siehe [Grenzen](#bekannte-grenzen)) |
 | Themen | Tags am Bild. Neue Themen werden erst beim Speichern angelegt, samt fehlender Oberthemen |
 | Album | Bild wird ins Album gelegt (`PUT /albums/{id}/assets`). Neue Alben entstehen erst beim Speichern (`POST /albums`); gibt es den Namen schon, wird das vorhandene Album genommen |
@@ -244,11 +313,12 @@ findet sich die Ursache in `dia-assistent.log` im Programmordner. Der API-Schlü
   deren Gesicht Immich nicht gefunden hat, legt der Assistent über `POST /faces` ein manuelles Gesicht an,
   dessen Rahmen das **ganze Bild** umfasst. Das Bild erscheint dann bei der Person, aber Immich lernt daraus
   nichts: Für manuelle Gesichter berechnet Immich keinen Gesichtsabdruck, die Person wird auf anderen Bildern
-  also nicht wiedererkannt. Neue Personen lassen sich deshalb nur über ein erkanntes Gesicht anlegen.
+  also nicht wiedererkannt. Damit Immich eine neue Person lernt, sollte sie über ein erkanntes Gesicht angelegt werden.
 - **Erkannte Gesichter:** Benannt wird nur das einzelne Gesicht. Gehört es in Immich zu einer unbenannten
-  Gesichtsgruppe, bleiben die übrigen Gesichter dieser Gruppe unberührt. Gesichter, die Immich schon einer
-  benannten Person zugeordnet hat, werden nicht abgefragt und lassen sich im Assistenten nicht korrigieren.
-- **Themen** werden nur hinzugefügt, nie entfernt.
+  Gesichtsgruppe, bleiben die übrigen Gesichter dieser Gruppe unberührt.
+- **Ort löschen** geht nicht: In Immich v3.3.1 akzeptiert `PUT /assets/{id}` für `latitude`/`longitude` nur Zahlen,
+  kein Leeren (`server/src/dtos/asset.dto.ts`). „Weiß ich nicht“ bei „Wo?“ ändert deshalb nichts in Immich.
+- **Themen und Alben** werden nur hinzugefügt, nie entfernt.
 - **Diktieren** gibt es nicht: Firefox unterstützt die Web-Speech-API nicht, und Chrome schickt die Sprache an Google.
 - **Testabdeckung:** Das Programm ist mit einer echten Immich-Instanz (v3.3.1) im Einsatz, aber nicht systematisch
   dagegen getestet. Automatisch geprüft wird gegen eine gemockte API. Bewusst nicht verifiziert sind:
