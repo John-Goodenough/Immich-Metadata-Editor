@@ -46,7 +46,8 @@ tags to photos in Immich. Runs locally and talks to Immich via its REST API.*
 - Ortssuche über OpenStreetMap. Von Immich erkannte Gesichter werden einzeln benannt (auch mit neuen Personen),
   weitere Personen per Fotoknopf. Themen (Immich-Tags) mit Unterthemen und Suche.
 - Bild per Knopf „Bild groß“ bildschirmfüllend ansehen.
-- Vollbild-Knopf, große farbige Knöpfe, deutlich erkennbare Eingabefelder.
+- Ruhige, kontrastreiche Gestaltung (warmer Papierton, Text mindestens 19 px, große Knöpfe), Vollbild-Knopf
+  schon auf der Startseite. Unten stehen auf jeder Frage an derselben Stelle „← Zurück“, „Weiß ich nicht“ und „Weiter →“.
 - Speichert nur, was ausgefüllt wurde. Nichts wird gelöscht.
 - Bearbeitete Bilder bekommen den Tag `Dia-bearbeitet`, damit sich der Fortschritt zählen lässt.
 - Läuft lokal auf `127.0.0.1`. Der Immich-API-Schlüssel bleibt im lokalen Programm und gelangt nie in den Browser.
@@ -134,10 +135,11 @@ Immich-Handy-App braucht.
 
 ## Bedienung
 
-1. Starter doppelklicken. Der Browser öffnet sich mit „Guten Tag! Es warten N Bilder auf Sie.“
+1. Starter doppelklicken. Der Browser öffnet sich mit „Guten Tag! N Bilder warten darauf, beschriftet zu werden.“
+   Dort gibt es auch „Fragen einstellen“ und „Vollbild“.
 2. Zu jedem Bild nacheinander:
-   - **Wann?** Jahrzehnt → Jahr → Monat → Tag, jeweils mit „Weiß ich nicht“, danach „Ganz sicher“ oder „Nur ungefähr“.
-   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen. „Weiß ich nicht“ überspringt die Frage. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
+   - **Wann?** Jahrzehnt → Jahr → Monat → Tag, „Weiß ich nicht“ steht unten in der Leiste, danach „Ganz sicher“ oder „Nur ungefähr“.
+   - **Wo?** Ort eintippen, „Suchen“, Treffer antippen, mit „Weiter“ bestätigen. „Weiß ich nicht“ überspringt die Frage. Hinter jedem Treffer steht, was er ist (Stadt, Dorf,
      Stadtteil, Kreis, Bundesland, Land …), damit z. B. die Stadt Kassel und der Landkreis Kassel unterscheidbar sind.
      Der gewählte Ort wird zusätzlich als Tag `Kontinent/Land/Ort` gespeichert, z. B. `Europa/Deutschland/Kassel`
      (bei einem Land nur `Europa/Deutschland`). Verwaltungszusätze wie „Landkreis“, „Kreis“ oder
@@ -147,26 +149,32 @@ Immich-Handy-App braucht.
    - **Was?** Ein paar Worte zum Bild.
    - **Wer?** Hat Immich Gesichter erkannt, kommt jedes einzeln: Das Gesicht ist im Bild orange umrandet und
      daneben vergrößert. Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
-     **„+ … neu anlegen“** die Person an. „Weiß ich nicht“ geht zum nächsten Gesicht. Danach (oder wenn kein
+     **„+ … neu anlegen“** die Person an. „Weiß ich nicht“ geht zum nächsten Gesicht. Jede Antwort springt gleich zum nächsten Gesicht.
+     Personen, die schon an einem anderen Gesicht hängen, stehen nicht mehr in der Liste. Danach (oder wenn kein
      Gesicht erkannt wurde) weitere Personen antippen, deren Gesicht nicht umrandet war, z. B. weil sie mit dem
      Rücken zur Kamera stehen. Wer dort nicht zu finden ist, wird über das Suchfeld mit **„+ … neu anlegen“**
-     als neue Person angelegt.
-   - **Themen:** Themen antippen. „›“ zeigt Unterthemen, oben zeigt die Pfadleiste („Alle Themen › Urlaub › Italien“),
-     wo man gerade ist. „+ Neues Thema“ legt ein Thema auf der aktuellen Ebene an. Über **„Thema suchen …“**
-     werden Themen aus allen Ebenen gefunden. Gibt es das gesuchte Thema nicht, lässt es sich direkt anlegen.
+     als neue Person angelegt. Der Knopf rechts unten zeigt „Niemand sonst →“ oder „Weiter (2 gewählt) →“.
+   - **Themen:** Themen antippen, die Auswahl steht oben als Chips (✕ entfernt). Nur Themen mit Unterthemen haben rechts
+     einen Teil „3 ›“, der die Unterthemen zeigt. Oben zeigt die Pfadleiste („Alle Themen › Urlaub › Italien“),
+     wo man gerade ist. Über **„Thema suchen oder neu eintippen …“** werden Themen aus allen Ebenen gefunden. Gibt es
+     das Thema nicht, steht oben **„+ „…“ neu anlegen“**. Danach fragt der Assistent „Wohin gehört …?“: unter dem
+     gerade geöffneten Thema, ohne Überthema, oder ein Überthema antippen bzw. suchen.
    - **Album:** Alben antippen, mehrere sind möglich. Alben, in denen das Foto schon ist, sind als „schon drin“
-     markiert. Über das Suchfeld wird gesucht; gibt es das Album nicht, legt **„+ Album … neu anlegen“** es an.
-   - **Fertig:** Zusammenfassung prüfen und **Speichern ✔**.
+     markiert. Über das Suchfeld wird gesucht; gibt es das Album nicht, legt **„+ „…“ neu anlegen“** es an.
+   - **Fertig:** Zusammenfassung prüfen; „Ändern“ neben jeder Zeile springt zur Frage. Dann **Speichern ✔**.
+     Klappt das Speichern nicht, bleiben alle Angaben stehen und „Noch einmal versuchen“ erscheint.
 3. **„Dieses Bild später“** (oben rechts) überspringt ein Bild, ohne etwas zu speichern. Es kommt beim nächsten
-   Start wieder. Am Ende holt **„Von vorne anfangen“** die übersprungenen Bilder sofort zurück.
+   Start wieder. Am Ende holt **„Aufgehobene Bilder jetzt ansehen“** die übersprungenen Bilder sofort zurück.
 
-**Zurück** geht immer, auch mit der Esc-Taste. Ein Klick auf einen Schritt in der Leiste oben (Wann?, Wo?, …)
+**Zurück** geht immer, auch mit der Esc-Taste (steht Text im Suchfeld, leert Esc zuerst das Feld). Ein Klick auf einen Schritt in der Leiste oben (Wann?, Wo?, …; beantwortete Schritte sind grün mit ✔)
 springt direkt zu dieser Frage; „Zurück“ führt danach wieder dorthin, wo man vorher war. Oben steht der Fortschritt („Bild 12 von 340“).
 Der Knopf **„Vollbild“** oben rechts schaltet den Browser in den Vollbildmodus und wieder zurück.
 
-Fährt die Maus über das Bild, erscheint unten rechts **„Bild groß“**. Es zeigt das Bild über den ganzen
+**„Bild groß“** unten rechts am Foto zeigt das Bild über den ganzen
 Bildschirm; **„✕ Bild klein“**, ein Klick ins Bild oder Esc führt zurück. Antippen des Bildes geht auch.
-Die Oberfläche ist für Bildschirme ab **1280 × 720** ausgelegt.
+Die Oberfläche ist für Bildschirme ab **1024 × 600** ausgelegt; unter 700 px Höhe wird sie etwas kompakter, unter
+900 px Breite steht das Foto oben. Listen blättern seitenweise, je nachdem, wie viel Platz ist. Lange Namen werden
+beim Drüberfahren mit der Maus vollständig angezeigt.
 
 **Fragen einstellen:** Auf der Startseite (und am Ende) führt **„⚙ Fragen einstellen“** zu einer Liste der sechs
 Fragen. Antippen schaltet eine Frage ein oder aus, mit ↑ und ↓ wird die Reihenfolge geändert, mindestens eine

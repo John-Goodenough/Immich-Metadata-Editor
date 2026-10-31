@@ -7,48 +7,63 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <header id="top">
-    <div id="progress-text" aria-live="polite"></div>
-    <div id="progress-bar"><div id="progress-fill"></div></div>
-    <button id="skip-image" class="btn btn-quiet" hidden>Dieses Bild später</button>
-    <button id="fullscreen" class="btn btn-quiet" aria-pressed="false" hidden>Vollbild</button>
+  <header id="top" class="topbar" hidden>
+    <div id="progress-text" class="count" aria-live="polite"></div>
+    <div id="progress-bar" class="progress" role="progressbar" aria-label="Fortschritt"><span id="progress-fill"></span></div>
+    <div class="top-actions">
+      <button id="skip-image" class="btn btn-quiet" type="button" hidden>
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="lbl-long">Dieses Bild später</span><span class="lbl-short">Später</span>
+      </button>
+      <button id="fullscreen" class="btn btn-quiet fs-toggle" type="button" aria-pressed="false" hidden></button>
+    </div>
   </header>
 
-  <main id="main">
-    <figure id="photo-box" hidden>
-      <img id="photo" alt="Das aktuelle Dia" title="Antippen zum Vergrößern">
-      <div id="face-mark" hidden></div>
-      <button id="photo-full" class="btn" type="button">&#x26F6; Bild groß</button>
-    </figure>
-    <section id="panel">
-      <ol id="steps" hidden>
-        <li data-step="when">Wann?</li>
-        <li data-step="where">Wo?</li>
-        <li data-step="what">Was?</li>
-        <li data-step="who">Wer?</li>
-        <li data-step="tags">Themen</li>
-        <li data-step="done">Fertig</li>
-      </ol>
-      <h1 id="question"></h1>
-      <p id="hint"></p>
-      <div id="content"></div>
-      <div id="error" role="alert" hidden>
-        <p id="error-text"></p>
-        <button id="error-retry" class="btn btn-primary">Noch einmal versuchen</button>
+  <main id="main" class="work">
+    <section id="photo-box" class="photo-pane" aria-label="Foto" hidden>
+      <div class="photo-frame">
+        <img id="photo" alt="Das aktuelle Dia" title="Antippen zum Vergrößern">
+        <div id="face-mark" class="face-mark" hidden><span id="face-mark-label" class="lbl"></span></div>
       </div>
-      <nav id="nav">
-        <button id="back" class="btn">&larr; Zurück</button>
-        <button id="next" class="btn btn-primary">Weiter &rarr;</button>
-      </nav>
+      <div id="photo-error" class="photo-error" role="alert" hidden>
+        <div class="big-ico" aria-hidden="true">&#x26A0;</div>
+        <p><b>Das Bild konnte nicht geladen werden.</b></p>
+        <p>Vielleicht ist die Verbindung kurz weg.</p>
+        <button id="photo-retry" class="btn btn-big" type="button">Noch einmal laden</button>
+      </div>
+      <button id="photo-full" class="btn btn-zoom" type="button">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Bild groß</span>
+      </button>
+    </section>
+    <section id="panel" class="panel">
+      <nav id="steps" class="steps" aria-label="Schritte" hidden></nav>
+      <div id="q" class="q">
+        <div id="q-extra"></div>
+        <div class="q-text">
+          <h1 id="question" tabindex="-1"></h1>
+          <p id="hint" class="help"></p>
+        </div>
+      </div>
+      <div id="content" class="answer"></div>
+      <div id="error" class="err" role="alert" hidden>
+        <p id="error-text"></p>
+        <button id="error-retry" class="btn" type="button">Noch einmal versuchen</button>
+      </div>
+      <footer id="nav" class="nav">
+        <button id="back" class="btn" type="button">&larr; Zurück</button>
+        <button id="skip" class="btn btn-skip" type="button">Weiß ich nicht</button>
+        <button id="next" class="btn btn-primary" type="button">Weiter &rarr;</button>
+      </footer>
     </section>
   </main>
 
   <div id="viewer" role="dialog" aria-modal="true" aria-label="Bild groß" hidden>
     <img id="viewer-photo" alt="Das aktuelle Dia, groß">
-    <button id="viewer-close" class="btn btn-primary" type="button">&#x2715; Bild klein</button>
+    <button id="viewer-close" class="btn btn-big" type="button">&#x2715; Bild klein</button>
   </div>
 
-  <div id="busy" hidden><div id="busy-text">Einen Moment bitte …</div></div>
+  <div id="busy" role="status" aria-live="polite" hidden>
+    <div class="busy-box"><span class="spinner" aria-hidden="true"></span><span id="busy-text">Einen Moment bitte …</span></div>
+  </div>
   <script src="/static/app.js"></script>
 </body>
 </html>
