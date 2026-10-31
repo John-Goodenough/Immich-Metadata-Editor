@@ -148,7 +148,9 @@ Immich-Handy-App braucht.
      Asien. Orts-Tags erscheinen nicht in der Themenliste.
    - **Was?** Ein paar Worte zum Bild.
    - **Wer?** Hat Immich Gesichter erkannt, kommt jedes einzeln: Das Gesicht ist im Bild orange umrandet und
-     daneben vergrößert. Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
+     daneben vergrößert. Hat Immich dem Gesicht schon eine Person zugeordnet, fragt der Assistent „Ist das …?“ mit
+     **„Ja, das ist …“**, **„Nein, jemand anderes“** und „Weiß ich nicht“ („Ja“ und „Weiß ich nicht“ lassen die Zuordnung
+     in Immich, wie sie ist). Sonst, oder nach „Nein, jemand anderes“: Person antippen oder Namen eintippen. Gibt es den Namen noch nicht, legt
      **„+ … neu anlegen“** die Person an. „Weiß ich nicht“ geht zum nächsten Gesicht. Jede Antwort springt gleich zum nächsten Gesicht.
      Personen, die schon an einem anderen Gesicht hängen, stehen nicht mehr in der Liste. Danach (oder wenn kein
      Gesicht erkannt wurde) weitere Personen antippen, deren Gesicht nicht umrandet war, z. B. weil sie mit dem

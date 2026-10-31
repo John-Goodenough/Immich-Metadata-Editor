@@ -194,7 +194,7 @@ function stepDone(step) {
     case "when": return a.year != null;
     case "where": return Boolean(a.placeName);
     case "what": return Boolean(a.description.trim());
-    case "who": return Object.keys(a.faces).length + a.person_ids.length + a.new_people.length > 0;
+    case "who": return Object.values(a.faces).some((v) => !v.skip) || a.person_ids.length + a.new_people.length > 0;
     case "tags": return a.tag_values.length > 0;
     case "album": return a.album_ids.length + a.new_albums.length > 0;
     default: return false;
@@ -581,43 +581,69 @@ const SCREENS = {
     c.append(text);
   },
 
-  // Ein von Immich erkanntes Gesicht nach dem anderen: "Wer ist das?". Jede Antwort geht gleich zum nächsten Gesicht.
+  // Ein von Immich erkanntes Gesicht nach dem anderen. Hat Immich schon eine Person zugeordnet (oder wurde eben
+  // eine gewählt), fragt der Assistent „Ist das …?“; sonst (oder nach „Nein, jemand anderes“) „Wer ist das?“ mit Liste.
+  // Jede Antwort geht gleich zum nächsten Gesicht. Bildschirm: "face:<Nr>" bzw. "face:<Nr>:pick".
   async face() {
     const a = state.answers;
-    const faces = facesToName();
-    const i = Number(state.screen.split(":")[1]) || 0;
+    const faces = askedFaces();
+    const [, nr, mode] = state.screen.split(":");
+    const i = Number(nr) || 0;
     const f = faces[i];
     if (!f) {
-      // keine (weiteren) unbenannten Gesichter: weiter mit der Personenliste
+      // keine (weiteren) Gesichter: weiter mit der Personenliste
       state.screen = "who";
       return SCREENS.who();
     }
     const screen = state.screen;
     const answer = a.faces[f.id];
     const following = i + 1 < faces.length ? `face:${i + 1}` : "who";
+    const answered = Boolean(answer);
     const pick = (value) => {
-      if (value) a.faces[f.id] = value; else delete a.faces[f.id];
+      a.faces[f.id] = value;
+      // „Zurück“ führt danach zur Frage „Ist das …?“ mit der neuen Wahl, nicht wieder in die Liste
+      if (mode === "pick" && !value.skip) state.screen = `face:${i}`;
       state.faceQuery = "";
       state.facePage = 0;
       go(following);
     };
-    const c = frame({
-      question: "Wer ist das?",
-      hint: faces.length > 1 ? `Gesicht ${i + 1} von ${faces.length} · im Foto orange umrandet` : "Das Gesicht ist im Foto orange umrandet.",
-      extra: faceCrop(f),
-      next: answer ? () => { state.faceQuery = ""; state.facePage = 0; go(following); } : null,
-    });
+    const hint = faces.length > 1 ? `Gesicht ${i + 1} von ${faces.length} · im Foto orange umrandet` : "Das Gesicht ist im Foto orange umrandet.";
+    const next = answered ? () => { state.faceQuery = ""; state.facePage = 0; go(following); } : null;
+    if (!(await loadPeople(frame({ question: "Wer ist das?", hint, extra: faceCrop(f) }), screen))) return;
+
+    // Wer ist es gerade? Gewählte Antwort vor der Zuordnung aus Immich
+    const current = answer?.person_id ? { id: answer.person_id, name: personName(answer.person_id) || "Unbekannte Person" }
+      : answer?.new_name ? { id: null, name: answer.new_name, isNew: true }
+        : f.personName ? { id: f.personId, name: f.personName } : null;
+    const confirmed = answered && !answer.skip;
+
+    if (current && mode !== "pick") {
+      const label = current.isNew ? `${current.name} (neu)` : current.name;
+      const c = frame({ question: `Ist das ${label}?`, hint, extra: faceCrop(f), next });
+      showFaceMark(f, i + 1);
+      const unknown = button("Weiß ich nicht", () => pick({ skip: true }), "btn-skip btn-answer2");
+      unknown.setAttribute("aria-pressed", String(Boolean(answer?.skip)));
+      c.append(el("div", { class: "answers", role: "group", "aria-label": "Antwort" },
+        el("button", {
+          type: "button", class: "btn btn-success btn-answer",
+          onclick: () => pick(confirmed ? answer : { person_id: f.personId }),
+        }, current.id ? avatar(current) : initialsAvatar(current.name), el("span", { class: "lbl" }, `${confirmed ? "✔ " : ""}Ja, das ist ${label}`)),
+        button("Nein, jemand anderes", () => go(`face:${i}:pick`), "btn-answer2"),
+        unknown));
+      return;
+    }
+
+    const c = frame({ question: "Wer ist das?", hint, extra: faceCrop(f), next });
     showFaceMark(f, i + 1);
-    if (!(await loadPeople(c, screen))) return;
-
     const input = searchField("face-input", state.faceQuery, "Name eintippen …", "Name");
-    const unknown = button("Weiß ich nicht", () => pick(null), "btn-skip");
+    const unknown = button("Weiß ich nicht", () => pick({ skip: true }), "btn-skip");
+    unknown.setAttribute("aria-pressed", String(Boolean(answer?.skip)));
     c.append(el("div", { class: "search-row" }, input, unknown));
-    if (answer?.new_name) c.append(el("div", { class: "chosen" }, el("span", { class: "txt" }, el("b", {}, "Gewählt: "), `${answer.new_name} (neu)`)));
 
-    // Wer schon an einem anderen Gesicht oder am Bild hängt, steht nicht mehr in der Liste
-    const taken = new Set(state.asset.personIds);
-    for (const [id, v] of Object.entries(a.faces)) if (id !== f.id && v.person_id) taken.add(v.person_id);
+    // Wer schon an einem anderen Gesicht oder am Bild hängt, steht nicht in der Liste,
+    // ebenso die Person, für die gerade „Nein, jemand anderes“ gewählt wurde
+    const taken = markedPeople(f.id);
+    if (current?.id) taken.add(current.id);
     const lst = pagedList(c, { getPage: () => state.facePage, setPage: (p) => { state.facePage = p; } });
     const draw = () => {
       const name = cleanName(state.faceQuery);
@@ -626,18 +652,18 @@ const SCREENS = {
         ? [newCell(name, people.length ? "Neue Person anlegen" : "Niemand mit diesem Namen – als neue Person anlegen", () => pick({ new_name: name }))]
         : [];
       lst.fill(people.map((p) => itemCell({
-        name: p.name, pressed: answer?.person_id === p.id, lead: avatar(p), cls: "person",
+        name: p.name, lead: avatar(p), cls: "person",
         onClick: () => pick({ person_id: p.id }),
-      })), lead, state.people.length ? "" : "In Immich sind noch keine Personen benannt.");
+      })), lead, state.people.length ? "Niemand mit diesem Namen." : "In Immich sind noch keine Personen benannt.");
     };
     input.addEventListener("input", () => { state.faceQuery = input.value; state.facePage = 0; draw(); });
     input.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
       const name = cleanName(input.value);
-      const match = state.people.find((p) => same(p.name, name));
+      const match = state.people.find((p) => same(p.name, name) && !taken.has(p.id));
       if (match) pick({ person_id: match.id });
-      else if (name) pick({ new_name: name });
+      else if (name && !state.people.some((p) => same(p.name, name))) pick({ new_name: name });
     });
     draw();
   },
@@ -645,7 +671,7 @@ const SCREENS = {
   // Personen, deren Gesicht nicht erkannt wurde: Zuordnung zum ganzen Bild (Mehrfachauswahl)
   async who() {
     const a = state.answers;
-    const asked = facesToName().length > 0;
+    const asked = askedFaces().length > 0;
     const c = frame({
       question: asked ? "Wer ist noch auf dem Foto?" : "Wer ist auf dem Foto?",
       hint: "Alle antippen, die zu sehen sind.",
@@ -939,7 +965,11 @@ const SCREENS = {
       nextCls: "btn-success",
     });
     const names = [...new Set([
-      ...Object.values(a.faces).map((v) => (v.new_name ? `${v.new_name} (neu)` : personName(v.person_id))),
+      ...askedFaces().map((f) => {
+        const v = a.faces[f.id];
+        if (v?.new_name) return `${v.new_name} (neu)`;
+        return v?.person_id ? personName(v.person_id) : f.personName;
+      }),
       ...a.person_ids.map(personName),
       ...a.new_people.map((n) => `${n} (neu)`),
     ].filter(Boolean))];
@@ -1066,15 +1096,31 @@ function initialsAvatar(name) {
   return el("span", { class: "avatar initials", "aria-hidden": "true" }, letters);
 }
 
-// Gesichter, die Immich erkannt hat, die aber noch keinen Namen haben
-function facesToName() {
-  return (state.asset?.faces || []).filter((f) => !f.personName);
+// Alle von Immich erkannten Gesichter, auch die schon benannten: jedes wird einzeln abgefragt
+function askedFaces() {
+  return state.asset?.faces || [];
 }
 
-// Personen, die schon über ein Gesicht am Bild hängen (vorher schon oder jetzt gewählt)
-function markedPeople() {
+// Wer hängt nach den bisherigen Antworten an einem Gesicht oder am ganzen Bild? Optional ohne ein bestimmtes Gesicht.
+function facePerson(f) {
+  const v = state.answers.faces[f.id];
+  if (v?.person_id) return v.person_id;
+  if (v?.new_name) return null;
+  return f.personId;
+}
+
+function markedPeople(exceptFaceId = null) {
   const ids = new Set(state.asset.personIds);
-  for (const v of Object.values(state.answers.faces)) if (v.person_id) ids.add(v.person_id);
+  for (const f of askedFaces()) {
+    // Gesicht wurde jemand anderem zugeordnet: die alte Person hängt dann (über dieses Gesicht) nicht mehr am Bild
+    if (f.personId && facePerson(f) !== f.personId && !askedFaces().some((g) => g !== f && facePerson(g) === f.personId)) ids.delete(f.personId);
+    if (f.id === exceptFaceId) {
+      if (f.personId && !askedFaces().some((g) => g !== f && facePerson(g) === f.personId)) ids.delete(f.personId);
+      continue;
+    }
+    const p = facePerson(f);
+    if (p) ids.add(p);
+  }
   return ids;
 }
 
@@ -1151,7 +1197,11 @@ async function saveCurrent() {
         latitude: a.latitude, longitude: a.longitude, place_tag: a.placeTag ?? null,
         description: a.description, person_ids: a.person_ids, new_people: a.new_people, tag_values: a.tag_values,
         album_ids: a.album_ids, new_albums: a.new_albums,
-        faces: Object.entries(a.faces).map(([face_id, v]) => ({ face_id, ...v })),
+        // „Ja“ bei schon zugeordneten Personen und „Weiß ich nicht“ ändern nichts und werden nicht geschickt
+        faces: askedFaces()
+          .map((f) => [f, a.faces[f.id]])
+          .filter(([f, v]) => v && (v.new_name || (v.person_id && v.person_id !== f.personId)))
+          .map(([f, v]) => (v.new_name ? { face_id: f.id, new_name: v.new_name } : { face_id: f.id, person_id: v.person_id })),
       }),
     });
   } catch (err) {

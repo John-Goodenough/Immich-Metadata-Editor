@@ -233,6 +233,11 @@ textarea.field { resize: none; flex: 1; min-height: 120px; line-height: 1.4; }
 .empty { padding: 16px; border: 2px dashed var(--c-line-soft); border-radius: var(--radius); color: var(--c-ink-2); text-align: center; grid-column: 1 / -1; }
 .answers { display: flex; flex-direction: column; gap: var(--gap); flex: none; }
 .answers-row { flex-direction: row; }
+/* „Ist das …?“: Ja (grün, groß) · Nein, jemand anderes · Weiß ich nicht */
+.btn-answer { min-height: calc(var(--btn-h-big) + 8px); justify-content: flex-start; gap: 14px; padding: 8px 20px 8px 12px; text-align: left; font-size: calc(var(--fs-base) * 1.05); }
+.btn-answer .lbl { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.btn-answer .avatar { box-shadow: 0 0 0 2px #fff; }
+.btn-answer2 { min-height: var(--btn-h-big); width: 100%; justify-content: flex-start; padding-left: 20px; }
 .answers-row .btn { flex: 1 1 0; min-width: 0; white-space: normal; padding: 6px 12px; overflow-wrap: anywhere; min-height: var(--btn-h-big); }
 
 /* Etikett & Chip */
