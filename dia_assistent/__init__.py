@@ -1,6 +1,6 @@
 """Dia-Assistent: seniorengerechte Oberfläche zum Nachpflegen von Immich-Bildern."""
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 
 def build_id() -> str:
