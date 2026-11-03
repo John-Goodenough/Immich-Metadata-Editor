@@ -864,7 +864,14 @@ const SCREENS = {
     const row = el("div", { class: "answers answers-row", role: "group", "aria-label": "Antwort" });
     const search = searchField("newtag-search", state.ntQuery, "Oder Überthema suchen …", "Überthema suchen");
     const crumbBox = el("div");
-    c.append(row, search, crumbBox);
+    // Suche beenden: zurück zur Übersicht aller Themen (oberste Ebene)
+    const endSearch = button("✕ Suche beenden", () => {
+      Object.assign(state, { ntQuery: "", ntPath: [], ntPage: 0 });
+      search.value = "";
+      draw();
+      search.focus();
+    });
+    c.append(row, el("div", { class: "search-row" }, search, endSearch), crumbBox);
     const lst = pagedList(c, { getPage: () => state.ntPage, setPage: (p) => { state.ntPage = p; } });
     const open = (parts) => {
       Object.assign(state, { ntPath: parts, ntQuery: "", ntPage: 0 });
@@ -874,10 +881,12 @@ const SCREENS = {
     const draw = () => {
       const path = state.ntPath;
       const query = state.ntQuery.trim();
-      row.replaceChildren(
+      // replaceChildren würde null als Text „null“ einfügen – daher leere Einträge herausfiltern
+      row.replaceChildren(...[
         path.length && !query ? button(`Unter „${path[path.length - 1]}“ anlegen`, () => create(path), "btn-success") : null,
         button("Ohne Überthema anlegen", () => create([])),
-      );
+      ].filter(Boolean));
+      endSearch.hidden = !query;
       crumbBox.replaceChildren(...(!query && path.length ? [crumbs(path, open)] : []));
       const prefix = path.length ? `${path.join("/")}/` : "";
       const items = query
@@ -920,7 +929,13 @@ const SCREENS = {
     const already = new Set(state.asset.albumIds);
     const chipBox = el("div");
     const filter = searchField("album-filter", state.albumFilter, "Album suchen oder neu eintippen …", "Album suchen oder neu eintippen", "200");
-    c.append(chipBox, filter);
+    const endSearch = button("✕ Suche beenden", () => {
+      Object.assign(state, { albumFilter: "", albumPage: 0 });
+      filter.value = "";
+      draw();
+      filter.focus();
+    });
+    c.append(chipBox, el("div", { class: "search-row" }, filter, endSearch));
     const lst = pagedList(c, { itemH: "calc(var(--btn-h) + 14px)", getPage: () => state.albumPage, setPage: (p) => { state.albumPage = p; } });
     const addNew = (name) => {
       if (!name || a.new_albums.some((n) => same(n, name))) return;
@@ -936,6 +951,7 @@ const SCREENS = {
         label: `${n} (neu)`,
         onClick: () => { a.new_albums.splice(k, 1); saveDraft(); draw(); },
       }))));
+      endSearch.hidden = !state.albumFilter;
       const name = cleanName(state.albumFilter);
       const list = state.albums.filter((al) => contains(al.name, name));
       const exists = [...state.albums.map((al) => al.name), ...a.new_albums].some((n) => same(n, name));
