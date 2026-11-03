@@ -639,7 +639,13 @@ const SCREENS = {
     const input = searchField("face-input", state.faceQuery, "Name eintippen …", "Name");
     const unknown = button("Weiß ich nicht", () => pick({ skip: true }), "btn-skip");
     unknown.setAttribute("aria-pressed", String(Boolean(answer?.skip)));
-    c.append(el("div", { class: "search-row" }, input, unknown));
+    const endSearch = button("✕ Suche beenden", () => {
+      Object.assign(state, { faceQuery: "", facePage: 0 });
+      input.value = "";
+      draw();
+      input.focus();
+    });
+    c.append(el("div", { class: "search-row" }, input, endSearch, unknown));
 
     // Wer schon an einem anderen Gesicht oder am Bild hängt, steht nicht in der Liste,
     // ebenso die Person, für die gerade „Nein, jemand anderes“ gewählt wurde
@@ -647,6 +653,7 @@ const SCREENS = {
     if (current?.id) taken.add(current.id);
     const lst = pagedList(c, { getPage: () => state.facePage, setPage: (p) => { state.facePage = p; } });
     const draw = () => {
+      endSearch.hidden = !state.faceQuery;
       const name = cleanName(state.faceQuery);
       const people = state.people.filter((p) => !taken.has(p.id) && contains(p.name, name));
       const lead = name && !state.people.some((p) => same(p.name, name))
@@ -688,7 +695,13 @@ const SCREENS = {
     if (known.length) $("hint").replaceChildren("Schon erkannt: ", el("b", {}, known.join(", ")));
 
     const filter = searchField("people-filter", state.peopleFilter, "Name eintippen …", "Name");
-    c.append(filter);
+    const endSearch = button("✕ Suche beenden", () => {
+      Object.assign(state, { peopleFilter: "", peoplePage: 0 });
+      filter.value = "";
+      draw();
+      filter.focus();
+    });
+    c.append(el("div", { class: "search-row" }, filter, endSearch));
     const lst = pagedList(c, { getPage: () => state.peoplePage, setPage: (p) => { state.peoplePage = p; } });
     const addNew = (name) => {
       if (!name || a.new_people.some((n) => same(n, name))) return;
@@ -706,6 +719,7 @@ const SCREENS = {
       buildSteps();
     };
     const draw = () => {
+      endSearch.hidden = !state.peopleFilter;
       const name = cleanName(state.peopleFilter);
       const people = state.people.filter((p) => !marked.has(p.id) && contains(p.name, name));
       const exists = [...state.people.map((p) => p.name), ...a.new_people].some((n) => same(n, name));
