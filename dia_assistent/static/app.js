@@ -759,7 +759,14 @@ const SCREENS = {
     const chipBox = el("div");
     const search = searchField("tag-search", state.tagQuery, "Thema suchen oder neu eintippen …", "Thema suchen oder neu eintippen");
     const crumbBox = el("div");
-    c.append(chipBox, search, crumbBox);
+    // Suche beenden: zurück zur Übersicht aller Themen (oberste Ebene)
+    const endSearch = button("✕ Suche beenden", () => {
+      Object.assign(state, { tagQuery: "", tagPath: [], tagPage: 0 });
+      search.value = "";
+      draw();
+      search.focus();
+    });
+    c.append(chipBox, el("div", { class: "search-row" }, search, endSearch), crumbBox);
     const lst = pagedList(c, { getPage: () => state.tagPage, setPage: (p) => { state.tagPage = p; } });
 
     const openFolder = (parts) => {
@@ -783,6 +790,7 @@ const SCREENS = {
         label: `${lastPart(v)}${isNewTag(v) ? " (neu)" : ""}`,
         onClick: () => toggle(v),
       }))));
+      endSearch.hidden = !query;
       crumbBox.replaceChildren(...(!query && path.length ? [crumbs(path, openFolder)] : []));
 
       // Ohne Suche: Themen der aktuellen Ebene. Mit Suche: Treffer aus allen Ebenen, Überthema darunter.
