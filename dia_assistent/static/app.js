@@ -673,7 +673,7 @@ const SCREENS = {
     // ebenso die Person, für die gerade „Nein, jemand anderes“ gewählt wurde
     const taken = markedPeople(f.id);
     if (current?.id) taken.add(current.id);
-    const lst = pagedList(c, { getPage: () => state.facePage, setPage: (p) => { state.facePage = p; } });
+    const lst = pagedList(c, { scroll: true, getPage: () => state.facePage, setPage: (p) => { state.facePage = p; } });
     const draw = () => {
       endSearch.hidden = !state.faceQuery;
       const name = cleanName(state.faceQuery);
@@ -724,7 +724,7 @@ const SCREENS = {
       filter.focus();
     });
     c.append(el("div", { class: "search-row" }, filter, endSearch));
-    const lst = pagedList(c, { getPage: () => state.peoplePage, setPage: (p) => { state.peoplePage = p; } });
+    const lst = pagedList(c, { scroll: true, getPage: () => state.peoplePage, setPage: (p) => { state.peoplePage = p; } });
     const addNew = (name) => {
       if (!name || a.new_people.some((n) => same(n, name))) return;
       a.new_people.push(name);
