@@ -316,16 +316,16 @@ async function render() {
 
 // Liste mit Blättern. Pro Seite stehen so viele Einträge, wie in die freie Höhe passen – nie Seiten-Scrollen.
 // lead: Einträge, die immer oben stehen (z. B. „+ … neu anlegen“).
-// grow: Einträge so hoch wie ihr Text (nichts klappt über den Nachbarn), Liste scrollt statt zu blättern
-function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", grow = false, getPage, setPage }) {
+// scroll: Liste scrollt statt zu blättern. grow: dazu Einträge so hoch wie ihr Text (nichts klappt über den Nachbarn)
+function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", grow = false, scroll = grow, getPage, setPage }) {
   const leadList = el("div", { class: "list one lead-list", hidden: true });
   leadList.style.setProperty("--item-h", "calc(var(--btn-h) + 8px)");
-  const list = el("div", { class: `list${cols === 1 ? " one" : ""}${grow ? " grow" : ""}` });
+  const list = el("div", { class: `list${cols === 1 ? " one" : ""}${scroll ? " scroll" : ""}${grow ? " grow" : ""}` });
   list.style.setProperty("--item-h", itemH);
   const pos = el("span", { class: "pos" });
   const prev = button("← Vorherige", () => turn(-1));
   const next = button("Weitere →", () => turn(1));
-  const pager = el("div", { class: "pager ghost", "aria-hidden": "true" }, prev, pos, next);
+  const pager = el("div", { class: "pager ghost", "aria-hidden": "true", hidden: scroll }, prev, pos, next);
   parent.append(leadList, list, pager);
   let cells = [];
   let emptyText = "";
@@ -347,7 +347,7 @@ function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", grow = false, get
     }
     let perPage = cells.length;
     // Ohne Maus (Touch) zeigt die Liste alles und scrollt, weil der volle Text immer dasteht
-    if (!grow && !matchMedia("(hover: none)").matches) {
+    if (!scroll && !matchMedia("(hover: none)").matches) {
       list.append(cells[0]);
       const gap = parseFloat(getComputedStyle(list).rowGap) || 0;
       const rows = Math.max(1, Math.floor((list.clientHeight + gap + 1) / (cells[0].offsetHeight + gap)));
@@ -423,6 +423,22 @@ function crumbs(path, open) {
   return nav;
 }
 
+// Bisher gewähltes Datum als Pfad „Alle Jahrzehnte › 1970er › 1974 › März“; jeder Teil führt zurück zu seiner Frage
+function dateCrumbs(level) {
+  const a = state.answers;
+  const d = state.decade ?? (a.year != null ? Math.floor(a.year / 10) * 10 : null);
+  const parts = [["Alle Jahrzehnte", "decade"]];
+  if (level !== "decade" && d != null) parts.push([decadeName(d), "year"]);
+  if ((level === "month" || level === "day") && a.year != null) parts.push([String(a.year), "month"]);
+  if (level === "day" && a.month != null) parts.push([MONTHS[a.month - 1], "day"]);
+  const nav = el("nav", { class: "crumbs", "aria-label": "Bisher gewählt" });
+  parts.forEach(([label, screen], i) => {
+    if (i === parts.length - 1) nav.append(el("span", { class: "cur", "aria-current": "step" }, label));
+    else nav.append(el("button", { type: "button", onclick: () => go(screen) }, label), el("span", { "aria-hidden": "true" }, "›"));
+  });
+  return nav;
+}
+
 // ---------- Bildschirme ----------
 
 const SCREENS = {
@@ -450,6 +466,7 @@ const SCREENS = {
       question: "Welches Jahr?", hint: `In den ${decadeName(d)}n. Wenn Sie es nicht genau wissen: unten antippen.`,
       next: () => (inDecade && !a.approximate ? go("month") : goAfter("when")),
     });
+    c.append(dateCrumbs("year"));
     const grid = el("div", { class: "grid g5" });
     for (let y = d; y < d + 10; y++) {
       grid.append(choice(String(y), a.year === y && !a.approximate, () => {
@@ -467,23 +484,27 @@ const SCREENS = {
   month() {
     const a = state.answers;
     const c = frame({
-      question: "Welcher Monat?", hint: `Im Jahr ${a.year}.`,
-      skip: () => { Object.assign(a, { month: null, day: null }); go("certainty"); },
+      question: "Welcher Monat?", hint: `Im Jahr ${a.year}. Wenn Sie den Monat nicht wissen: unten antippen.`,
       next: () => go(a.month != null ? "day" : "certainty"),
     });
     const grid = el("div", { class: "grid g3" });
     MONTHS.forEach((name, i) => grid.append(choice(name, a.month === i + 1, () => {
+      if (a.month !== i + 1) a.day = null;
       a.month = i + 1;
       go("day");
     })));
-    c.append(grid);
+    // Jahr bekannt, Monat nicht: eigener großer Knopf statt „Weiß ich nicht“ unten in der Ecke
+    const onlyYear = choice(`Monat weiß ich nicht – nur ${a.year}`, false, () => {
+      Object.assign(a, { month: null, day: null });
+      go("certainty");
+    }, "choice-wide");
+    c.append(dateCrumbs("month"), grid, onlyYear);
   },
 
   day() {
     const a = state.answers;
     const c = frame({
-      question: "Welcher Tag?", hint: `Im ${MONTHS[a.month - 1]} ${a.year}.`,
-      skip: () => { a.day = null; go("certainty"); },
+      question: "Welcher Tag?", hint: `Im ${MONTHS[a.month - 1]} ${a.year}. Wenn Sie den Tag nicht wissen: unten antippen.`,
       next: () => go("certainty"),
     });
     const grid = el("div", { class: "grid g8" });
@@ -491,7 +512,8 @@ const SCREENS = {
     for (let d = 1; d <= days; d++) {
       grid.append(choice(String(d), a.day === d, () => { a.day = d; go("certainty"); }));
     }
-    c.append(grid);
+    const onlyMonth = choice(`Tag weiß ich nicht – nur ${MONTHS[a.month - 1]} ${a.year}`, false, () => { a.day = null; go("certainty"); }, "choice-wide");
+    c.append(dateCrumbs("day"), grid, onlyMonth);
   },
 
   certainty() {
@@ -781,7 +803,7 @@ const SCREENS = {
       search.focus();
     });
     c.append(chipBox, el("div", { class: "search-row" }, search, endSearch), crumbBox);
-    const lst = pagedList(c, { getPage: () => state.tagPage, setPage: (p) => { state.tagPage = p; } });
+    const lst = pagedList(c, { scroll: true, getPage: () => state.tagPage, setPage: (p) => { state.tagPage = p; } });
 
     const openFolder = (parts) => {
       state.tagPath = parts;
@@ -872,7 +894,7 @@ const SCREENS = {
       search.focus();
     });
     c.append(row, el("div", { class: "search-row" }, search, endSearch), crumbBox);
-    const lst = pagedList(c, { getPage: () => state.ntPage, setPage: (p) => { state.ntPage = p; } });
+    const lst = pagedList(c, { scroll: true, getPage: () => state.ntPage, setPage: (p) => { state.ntPage = p; } });
     const open = (parts) => {
       Object.assign(state, { ntPath: parts, ntQuery: "", ntPage: 0 });
       search.value = "";

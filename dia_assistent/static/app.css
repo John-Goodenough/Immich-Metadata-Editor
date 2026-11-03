@@ -299,7 +299,8 @@ textarea.field { resize: none; flex: 1; min-height: 120px; line-height: 1.4; }
 }
 
 /* Liste mit mitwachsenden Einträgen (Ortssuche): voller Text, keine Überlappung, Liste scrollt */
-.list.grow { overflow: auto; grid-auto-rows: auto; }
+.list.scroll { overflow: auto; padding: 2px 4px 8px 2px; }
+.list.grow { grid-auto-rows: auto; }
 .list.grow .cell { height: auto; min-height: var(--item-h, var(--btn-h)); }
 .list.grow .item { position: relative; }
 .list.grow .item .name, .list.grow .item .meta { -webkit-line-clamp: unset; display: block; }
