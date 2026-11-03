@@ -316,10 +316,11 @@ async function render() {
 
 // Liste mit Blättern. Pro Seite stehen so viele Einträge, wie in die freie Höhe passen – nie Seiten-Scrollen.
 // lead: Einträge, die immer oben stehen (z. B. „+ … neu anlegen“).
-function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", getPage, setPage }) {
+// grow: Einträge so hoch wie ihr Text (nichts klappt über den Nachbarn), Liste scrollt statt zu blättern
+function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", grow = false, getPage, setPage }) {
   const leadList = el("div", { class: "list one lead-list", hidden: true });
   leadList.style.setProperty("--item-h", "calc(var(--btn-h) + 8px)");
-  const list = el("div", { class: `list${cols === 1 ? " one" : ""}` });
+  const list = el("div", { class: `list${cols === 1 ? " one" : ""}${grow ? " grow" : ""}` });
   list.style.setProperty("--item-h", itemH);
   const pos = el("span", { class: "pos" });
   const prev = button("← Vorherige", () => turn(-1));
@@ -346,7 +347,7 @@ function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", getPage, setPage 
     }
     let perPage = cells.length;
     // Ohne Maus (Touch) zeigt die Liste alles und scrollt, weil der volle Text immer dasteht
-    if (!matchMedia("(hover: none)").matches) {
+    if (!grow && !matchMedia("(hover: none)").matches) {
       list.append(cells[0]);
       const gap = parseFloat(getComputedStyle(list).rowGap) || 0;
       const rows = Math.max(1, Math.floor((list.clientHeight + gap + 1) / (cells[0].offsetHeight + gap)));
@@ -550,7 +551,7 @@ const SCREENS = {
     c.append(el("div", { class: "search-row" }, input, button("Suchen", search, "btn-primary")));
     if (!results) return;
     const lst = pagedList(c, {
-      cols: 1, itemH: "calc(var(--btn-h) + 10px)",
+      cols: 1, itemH: "calc(var(--btn-h) + 10px)", grow: true,
       getPage: () => state.placePage, setPage: (p) => { state.placePage = p; },
     });
     lst.fill(results.map((r) => itemCell({
