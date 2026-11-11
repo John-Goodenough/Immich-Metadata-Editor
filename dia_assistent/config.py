@@ -57,8 +57,7 @@ def load_config(path: Path | None = None) -> Config:
     key = values.get("IMMICH_API_KEY", "")
     if not url or not key:
         raise ConfigError("IMMICH_URL und IMMICH_API_KEY müssen in der Einstellungsdatei stehen.")
-    if url.endswith("/api"):
-        url = url[: -len("/api")]
+    url = url.removesuffix("/api")
 
     def as_int(name: str, default: int) -> int:
         try:
