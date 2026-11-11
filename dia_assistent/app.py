@@ -114,7 +114,7 @@ def create_app(
     # statt die alten aus dem Zwischenspeicher zu nehmen
     page = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     for asset in ("/static/app.css", "/static/app.js"):
-        page = page.replace(f'"{asset}"', f'"{asset}?v={build}"')
+        page = page.replace(f'"{asset}"', f'"{asset}?v={build_id()}"')
 
     @app.get("/")
     async def index():
