@@ -137,24 +137,22 @@ def full_image_face(asset_id: str, person_id: str, width: int, height: int) -> d
     }
 
 
-def normalize_album_name(name: str) -> str:
-    """Name eines neuen Albums säubern: Leerraum zusammenziehen, nicht leer."""
+def _normalize_name(name: str, max_length: int, empty: str, too_long: str) -> str:
+    """Leerraum zusammenziehen; der Name darf weder leer noch zu lang sein."""
     name = " ".join(name.split())
     if not name:
-        raise InvalidInput("Ein neues Album hat keinen Namen.")
-    if len(name) > 200:
-        raise InvalidInput("Ein Albumname ist zu lang.")
+        raise InvalidInput(empty)
+    if len(name) > max_length:
+        raise InvalidInput(too_long)
     return name
+
+
+def normalize_album_name(name: str) -> str:
+    return _normalize_name(name, 200, "Ein neues Album hat keinen Namen.", "Ein Albumname ist zu lang.")
 
 
 def normalize_person_name(name: str) -> str:
-    """Name einer neuen Person säubern: Leerraum zusammenziehen, nicht leer."""
-    name = " ".join(name.split())
-    if not name:
-        raise InvalidInput("Eine neue Person hat keinen Namen.")
-    if len(name) > 100:
-        raise InvalidInput("Ein Name ist zu lang.")
-    return name
+    return _normalize_name(name, 100, "Eine neue Person hat keinen Namen.", "Ein Name ist zu lang.")
 
 
 def face_boxes(faces: list[dict]) -> list[dict]:

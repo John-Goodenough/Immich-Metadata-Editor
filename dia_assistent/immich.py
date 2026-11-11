@@ -38,6 +38,9 @@ def _german_message(exc: Exception) -> str:
     return "Unbekannter Fehler beim Server."
 
 
+_TAG_FAILED = "Die Markierung konnte nicht geändert werden."
+
+
 class ImmichClient:
     def __init__(self, base_url: str, api_key: str, transport: httpx.AsyncBaseTransport | None = None):
         self._http = httpx.AsyncClient(
@@ -67,12 +70,10 @@ class ImmichClient:
     async def find_tag_id(self, name: str) -> str | None:
         """GET /tags. Treffer über vollen Pfad (value) oder Namen."""
         tags = await self.tags()
-        for tag in tags:
-            if tag.get("value") == name:
-                return tag["id"]
-        for tag in tags:
-            if tag.get("name") == name:
-                return tag["id"]
+        for key in ("value", "name"):
+            for tag in tags:
+                if tag.get(key) == name:
+                    return tag["id"]
         return None
 
     async def asset_ids_with_tag(self, tag_id: str) -> list[str]:
@@ -136,25 +137,25 @@ class ImmichClient:
         tags = (await self._request("PUT", "/tags", json={"tags": values})).json()
         return {tag["value"]: tag["id"] for tag in tags}
 
+    async def _bulk(self, method: str, url: str, asset_id: str, harmless: tuple[str, ...], message: str) -> None:
+        """Sammelaufruf für ein Bild. Fehlerarten aus "harmless" (z. B. schon erledigt) gelten als Erfolg."""
+        results = (await self._request(method, url, json={"ids": [asset_id]})).json()
+        if any(not item.get("success") and item.get("error") not in harmless for item in results):
+            raise ImmichError(message)
+
     async def tag_asset(self, tag_id: str, asset_id: str) -> None:
-        await self._bulk("PUT", tag_id, asset_id)
+        # "duplicate": schon getaggt
+        await self._bulk("PUT", f"/tags/{tag_id}/assets", asset_id, ("duplicate", "not_found"), _TAG_FAILED)
 
     async def untag_asset(self, tag_id: str, asset_id: str) -> None:
-        await self._bulk("DELETE", tag_id, asset_id)
-
-    async def _bulk(self, method: str, tag_id: str, asset_id: str) -> None:
-        results = (await self._request(method, f"/tags/{tag_id}/assets", json={"ids": [asset_id]})).json()
-        for item in results:
-            # "duplicate" (schon getaggt) und "not_found" (schon entfernt) sind kein Fehler
-            if not item.get("success") and item.get("error") not in ("duplicate", "not_found"):
-                raise ImmichError("Die Markierung konnte nicht geändert werden.")
+        # "not_found": schon entfernt
+        await self._bulk("DELETE", f"/tags/{tag_id}/assets", asset_id, ("duplicate", "not_found"), _TAG_FAILED)
 
     async def add_to_album(self, album_id: str, asset_id: str) -> None:
-        results = (await self._request("PUT", f"/albums/{album_id}/assets", json={"ids": [asset_id]})).json()
-        for item in results:
-            # "duplicate": Bild ist schon im Album
-            if not item.get("success") and item.get("error") != "duplicate":
-                raise ImmichError("Das Bild konnte nicht ins Album gelegt werden.")
+        # "duplicate": Bild ist schon im Album
+        await self._bulk(
+            "PUT", f"/albums/{album_id}/assets", asset_id, ("duplicate",), "Das Bild konnte nicht ins Album gelegt werden."
+        )
 
     async def create_album(self, name: str, asset_id: str) -> None:
         await self._request("POST", "/albums", json={"albumName": name, "assetIds": [asset_id]})
@@ -258,9 +259,7 @@ async def save_answers(
         height = asset.get("height") or exif.get("exifImageHeight")
         if not width or not height:
             raise InvalidInput("Die Bildgröße ist unbekannt, Personen können nicht zugeordnet werden.")
-        person_ids = list(answers.person_ids)
-        for name in answers.new_people:
-            person_ids.append(await persons.id_for(name))
+        person_ids = [*answers.person_ids, *[await persons.id_for(name) for name in answers.new_people]]
         present = await client.face_person_ids(asset_id)
         for person_id in dict.fromkeys(person_ids):
             if person_id not in present:

@@ -65,8 +65,7 @@ def create_app(
 ) -> FastAPI:
     immich = immich or ImmichClient(config.immich_url, config.api_key)
     geocoder = geocoder or Geocoder(config.nominatim_url, config.nominatim_contact)
-    state: dict = {"work_tag_id": None}
-    build = build_id()
+    work_tag: str | None = None
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -91,12 +90,25 @@ def create_app(
         return JSONResponse({"fehler": "Da ist etwas schiefgegangen. Bitte noch einmal versuchen."}, status_code=500)
 
     async def work_tag_id() -> str:
-        if not state["work_tag_id"]:
-            tag_id = await immich.find_tag_id(config.tag_name)
-            if not tag_id:
+        nonlocal work_tag
+        if not work_tag:
+            work_tag = await immich.find_tag_id(config.tag_name)
+            if not work_tag:
                 raise ImmichError(f"Die Markierung „{config.tag_name}“ gibt es in Immich nicht.")
-            state["work_tag_id"] = tag_id
-        return state["work_tag_id"]
+        return work_tag
+
+    def forbidden(request: Request) -> JSONResponse | None:
+        # Eigener Header erzwingt CORS-Preflight: fremde Webseiten können nichts ändern oder beenden
+        if request.headers.get(CONTROL_HEADER) != "1":
+            return JSONResponse({"fehler": "Nicht erlaubt."}, status_code=403)
+        return None
+
+    def image(upstream, max_age: int) -> Response:
+        return Response(
+            upstream.content,
+            media_type=upstream.headers.get("content-type", "image/jpeg"),
+            headers={"Cache-Control": f"private, max-age={max_age}"},
+        )
 
     # Prüfsumme an CSS/JS anhängen: Nach einem Update holt der Browser die neuen Dateien,
     # statt die alten aus dem Zwischenspeicher zu nehmen
@@ -115,14 +127,13 @@ def create_app(
             "yearTo": config.year_to,
             "steps": load_steps(steps_file),
             "version": __version__,
-            "build": build,
+            "build": build_id(),
         }
 
     @app.put("/api/settings/steps")
     async def put_steps(body: StepsRequest, request: Request):
-        # Eigener Header erzwingt CORS-Preflight: fremde Webseiten können den Ablauf nicht ändern
-        if request.headers.get(CONTROL_HEADER) != "1":
-            return JSONResponse({"fehler": "Nicht erlaubt."}, status_code=403)
+        if denied := forbidden(request):
+            return denied
         try:
             save_steps(steps_file, body.steps)
         except ConfigError as exc:
@@ -133,8 +144,8 @@ def create_app(
     @app.post("/api/quit")
     async def quit_server(request: Request):
         """Vom Starter benutzt, um einen veralteten Server zu beenden."""
-        if request.headers.get(CONTROL_HEADER) != "1":
-            return JSONResponse({"fehler": "Nicht erlaubt."}, status_code=403)
+        if denied := forbidden(request):
+            return denied
         log.info("Beenden angefordert")
         asyncio.get_running_loop().call_later(0.2, os.kill, os.getpid(), signal.SIGTERM)
         return {"ok": True}
@@ -174,12 +185,7 @@ def create_app(
 
     @app.get("/api/assets/{asset_id}/preview")
     async def preview(asset_id: str = PathParam(pattern=UUID)):
-        upstream = await immich.preview(asset_id)
-        return Response(
-            upstream.content,
-            media_type=upstream.headers.get("content-type", "image/jpeg"),
-            headers={"Cache-Control": "private, max-age=3600"},
-        )
+        return image(await immich.preview(asset_id), 3600)
 
     @app.get("/api/people")
     async def people():
@@ -187,12 +193,7 @@ def create_app(
 
     @app.get("/api/people/{person_id}/thumbnail")
     async def person_thumbnail(person_id: str = PathParam(pattern=UUID)):
-        upstream = await immich.person_thumbnail(person_id)
-        return Response(
-            upstream.content,
-            media_type=upstream.headers.get("content-type", "image/jpeg"),
-            headers={"Cache-Control": "private, max-age=86400"},
-        )
+        return image(await immich.person_thumbnail(person_id), 86400)
 
     @app.get("/api/albums")
     async def albums():

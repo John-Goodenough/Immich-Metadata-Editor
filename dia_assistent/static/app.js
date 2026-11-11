@@ -103,6 +103,10 @@ function images(n) {
   return n === 1 ? "1 Bild" : `${n} Bilder`;
 }
 
+function decadeOf(year) {
+  return Math.floor(year / 10) * 10;
+}
+
 function decadeName(d) {
   return d >= 2000 ? `${d}er` : `${String(d).slice(2)}er`;
 }
@@ -123,8 +127,45 @@ function cleanName(text) {
   return text.split(/\s+/).filter(Boolean).join(" ");
 }
 
+// Wert in einer Auswahlliste umschalten: vorhanden -> entfernen, sonst anhängen
+function toggleIn(list, value) {
+  const at = list.indexOf(value);
+  if (at >= 0) list.splice(at, 1); else list.push(value);
+}
+
 function searchField(id, value, placeholder, label, maxlength = "100") {
   return el("input", { class: "field", type: "text", id, value, placeholder, "aria-label": label, autocomplete: "off", maxlength });
+}
+
+// Suchfeld mit „✕ Suche beenden“. Tippen und Beenden setzen die Liste auf Seite 1 und zeichnen sie neu.
+// reset: was „Suche beenden“ zusätzlich zurücksetzt (z. B. die Themen-Ebene).
+function searchBox({ id, queryKey, pageKey, placeholder, label, maxlength, reset = {}, draw }) {
+  const input = searchField(id, state[queryKey], placeholder, label, maxlength);
+  input.addEventListener("input", () => { state[queryKey] = input.value; state[pageKey] = 0; draw(); });
+  const endSearch = button("✕ Suche beenden", () => {
+    Object.assign(state, { [queryKey]: "", [pageKey]: 0 }, reset);
+    input.value = "";
+    draw();
+    input.focus();
+  });
+  return { input, endSearch };
+}
+
+// Liste aus Immich (people, tags, albums) einmal laden und merken.
+// false: Fehler, oder inzwischen ist ein anderer Bildschirm offen – dann nichts weiter zeichnen.
+async function loadList(key, label, c, screen) {
+  if (state[key] !== null) return true;
+  c.append(el("p", {}, `${label} werden geladen …`));
+  try {
+    state[key] = await api(`/api/${key}`);
+  } catch (err) {
+    c.replaceChildren();
+    showError(err.message, () => render());
+    return false;
+  }
+  if (state.screen !== screen) return false;
+  c.replaceChildren();
+  return true;
 }
 
 async function api(path, options = {}) {
@@ -233,7 +274,6 @@ function frame({
   $("skip").classList.toggle("slot", !skip);
   $("skip").onclick = skip;
   $("skip").tabIndex = skip ? 0 : -1;
-  $("next").classList.toggle("slot", !next);
   $("next").tabIndex = next ? 0 : -1;
   $("next").textContent = nextLabel;
   $("next").onclick = next;
@@ -316,8 +356,8 @@ async function render() {
 
 // Liste mit Blättern. Pro Seite stehen so viele Einträge, wie in die freie Höhe passen – nie Seiten-Scrollen.
 // lead: Einträge, die immer oben stehen (z. B. „+ … neu anlegen“).
-// scroll: Liste scrollt statt zu blättern. grow: dazu Einträge so hoch wie ihr Text (nichts klappt über den Nachbarn)
-function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", grow = false, scroll = grow, getPage, setPage }) {
+// pageKey: Name der Seitennummer in state. scroll: Liste scrollt statt zu blättern. grow: dazu Einträge so hoch wie ihr Text (nichts klappt über den Nachbarn)
+function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", grow = false, scroll = grow, pageKey }) {
   const leadList = el("div", { class: "list one lead-list", hidden: true });
   leadList.style.setProperty("--item-h", "calc(var(--btn-h) + 8px)");
   const list = el("div", { class: `list${cols === 1 ? " one" : ""}${scroll ? " scroll" : ""}${grow ? " grow" : ""}` });
@@ -331,7 +371,7 @@ function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", grow = false, scr
   let emptyText = "";
 
   function turn(delta) {
-    setPage(getPage() + delta);
+    state[pageKey] += delta;
     show();
     const target = delta < 0 ? prev : next;
     (target.disabled ? (delta < 0 ? next : prev) : target).focus({ preventScroll: true });
@@ -354,8 +394,8 @@ function pagedList(parent, { cols = 2, itemH = "var(--btn-h)", grow = false, scr
       perPage = rows * cols;
     }
     const pages = Math.max(1, Math.ceil(cells.length / perPage));
-    const page = Math.min(Math.max(0, getPage()), pages - 1);
-    setPage(page);
+    const page = Math.min(Math.max(0, state[pageKey]), pages - 1);
+    state[pageKey] = page;
     list.replaceChildren(...cells.slice(page * perPage, (page + 1) * perPage));
     pos.textContent = `Seite ${page + 1} von ${pages}`;
     prev.disabled = page === 0;
@@ -412,31 +452,30 @@ function chips(lead, entries) {
       label, el("span", { class: "x", "aria-hidden": "true" }, "✕"))));
 }
 
-// Pfadleiste: Alle Themen › Urlaub › Italien
-function crumbs(path, open) {
-  const nav = el("nav", { class: "crumbs", "aria-label": "Themen-Ebene" });
-  const parts = ["Alle Themen", ...path];
-  parts.forEach((part, depth) => {
-    if (depth === parts.length - 1) nav.append(el("span", { class: "cur", "aria-current": "page" }, part));
-    else nav.append(el("button", { type: "button", onclick: () => open(path.slice(0, depth)) }, part), el("span", { "aria-hidden": "true" }, "›"));
+// Pfadleiste aus [Text, Klick]-Paaren; der letzte Teil ist die aktuelle Stelle und kein Knopf
+function crumbNav(label, current, parts) {
+  const nav = el("nav", { class: "crumbs", "aria-label": label });
+  parts.forEach(([text, onclick], i) => {
+    if (i === parts.length - 1) nav.append(el("span", { class: "cur", "aria-current": current }, text));
+    else nav.append(el("button", { type: "button", onclick }, text), el("span", { "aria-hidden": "true" }, "›"));
   });
   return nav;
+}
+
+// Alle Themen › Urlaub › Italien
+function crumbs(path, open) {
+  return crumbNav("Themen-Ebene", "page", ["Alle Themen", ...path].map((part, depth) => [part, () => open(path.slice(0, depth))]));
 }
 
 // Bisher gewähltes Datum als Pfad „Alle Jahrzehnte › 1970er › 1974 › März“; jeder Teil führt zurück zu seiner Frage
 function dateCrumbs(level) {
   const a = state.answers;
-  const d = state.decade ?? (a.year != null ? Math.floor(a.year / 10) * 10 : null);
+  const d = state.decade ?? (a.year != null ? decadeOf(a.year) : null);
   const parts = [["Alle Jahrzehnte", "decade"]];
   if (level !== "decade" && d != null) parts.push([decadeName(d), "year"]);
   if ((level === "month" || level === "day") && a.year != null) parts.push([String(a.year), "month"]);
   if (level === "day" && a.month != null) parts.push([MONTHS[a.month - 1], "day"]);
-  const nav = el("nav", { class: "crumbs", "aria-label": "Bisher gewählt" });
-  parts.forEach(([label, screen], i) => {
-    if (i === parts.length - 1) nav.append(el("span", { class: "cur", "aria-current": "step" }, label));
-    else nav.append(el("button", { type: "button", onclick: () => go(screen) }, label), el("span", { "aria-hidden": "true" }, "›"));
-  });
-  return nav;
+  return crumbNav("Bisher gewählt", "step", parts.map(([label, screen]) => [label, () => go(screen)]));
 }
 
 // ---------- Bildschirme ----------
@@ -450,9 +489,8 @@ const SCREENS = {
       next: () => goAfter("when"),
     });
     const grid = el("div", { class: "grid g4" });
-    const from = Math.floor(state.settings.yearFrom / 10) * 10;
-    for (let d = from; d <= state.settings.yearTo; d += 10) {
-      const chosen = a.year != null && Math.floor(a.year / 10) * 10 === d;
+    for (let d = decadeOf(state.settings.yearFrom); d <= state.settings.yearTo; d += 10) {
+      const chosen = a.year != null && decadeOf(a.year) === d;
       grid.append(choice(decadeName(d), chosen, () => { state.decade = d; go("year"); }));
     }
     c.append(grid);
@@ -460,7 +498,7 @@ const SCREENS = {
 
   year() {
     const a = state.answers;
-    const d = state.decade ?? (a.year != null ? Math.floor(a.year / 10) * 10 : 1960);
+    const d = state.decade ?? (a.year != null ? decadeOf(a.year) : 1960);
     const inDecade = a.year != null && a.year >= d && a.year < d + 10;
     const c = frame({
       question: "Welches Jahr?", hint: `In den ${decadeName(d)}n. Wenn Sie es nicht genau wissen: unten antippen.`,
@@ -574,7 +612,7 @@ const SCREENS = {
     if (!results) return;
     const lst = pagedList(c, {
       cols: 1, itemH: "calc(var(--btn-h) + 10px)", grow: true,
-      getPage: () => state.placePage, setPage: (p) => { state.placePage = p; },
+      pageKey: "placePage",
     });
     lst.fill(results.map((r) => itemCell({
       name: r.name,
@@ -622,17 +660,21 @@ const SCREENS = {
     const answer = a.faces[f.id];
     const following = i + 1 < faces.length ? `face:${i + 1}` : "who";
     const answered = Boolean(answer);
+    const leave = () => { state.faceQuery = ""; state.facePage = 0; go(following); };
     const pick = (value) => {
       a.faces[f.id] = value;
       // „Zurück“ führt danach zur Frage „Ist das …?“ mit der neuen Wahl, nicht wieder in die Liste
       if (mode === "pick" && !value.skip) state.screen = `face:${i}`;
-      state.faceQuery = "";
-      state.facePage = 0;
-      go(following);
+      leave();
+    };
+    const unknown = (cls) => {
+      const b = button("Weiß ich nicht", () => pick({ skip: true }), cls);
+      b.setAttribute("aria-pressed", String(Boolean(answer?.skip)));
+      return b;
     };
     const hint = faces.length > 1 ? `Gesicht ${i + 1} von ${faces.length} · im Foto orange umrandet` : "Das Gesicht ist im Foto orange umrandet.";
-    const next = answered ? () => { state.faceQuery = ""; state.facePage = 0; go(following); } : null;
-    if (!(await loadPeople(frame({ question: "Wer ist das?", hint, extra: faceCrop(f) }), screen))) return;
+    const next = answered ? leave : null;
+    if (!(await loadList("people", "Personen", frame({ question: "Wer ist das?", hint, extra: faceCrop(f) }), screen))) return;
 
     // Wer ist es gerade? Gewählte Antwort vor der Zuordnung aus Immich
     const current = answer?.person_id ? { id: answer.person_id, name: personName(answer.person_id) || "Unbekannte Person" }
@@ -644,36 +686,28 @@ const SCREENS = {
       const label = current.isNew ? `${current.name} (neu)` : current.name;
       const c = frame({ question: `Ist das ${label}?`, hint, extra: faceCrop(f), next });
       showFaceMark(f, i + 1);
-      const unknown = button("Weiß ich nicht", () => pick({ skip: true }), "btn-skip btn-answer2");
-      unknown.setAttribute("aria-pressed", String(Boolean(answer?.skip)));
       c.append(el("div", { class: "answers", role: "group", "aria-label": "Antwort" },
         el("button", {
           type: "button", class: "btn btn-success btn-answer",
           onclick: () => pick(confirmed ? answer : { person_id: f.personId }),
         }, current.id ? avatar(current) : initialsAvatar(current.name), el("span", { class: "lbl" }, `${confirmed ? "✔ " : ""}Ja, das ist ${label}`)),
         button("Nein, jemand anderes", () => go(`face:${i}:pick`), "btn-answer2"),
-        unknown));
+        unknown("btn-skip btn-answer2")));
       return;
     }
 
     const c = frame({ question: "Wer ist das?", hint, extra: faceCrop(f), next });
     showFaceMark(f, i + 1);
-    const input = searchField("face-input", state.faceQuery, "Name eintippen …", "Name");
-    const unknown = button("Weiß ich nicht", () => pick({ skip: true }), "btn-skip");
-    unknown.setAttribute("aria-pressed", String(Boolean(answer?.skip)));
-    const endSearch = button("✕ Suche beenden", () => {
-      Object.assign(state, { faceQuery: "", facePage: 0 });
-      input.value = "";
-      draw();
-      input.focus();
+    const { input, endSearch } = searchBox({
+      id: "face-input", queryKey: "faceQuery", pageKey: "facePage", placeholder: "Name eintippen …", label: "Name", draw: () => draw(),
     });
-    c.append(el("div", { class: "search-row" }, input, endSearch, unknown));
+    c.append(el("div", { class: "search-row" }, input, endSearch, unknown("btn-skip")));
 
     // Wer schon an einem anderen Gesicht oder am Bild hängt, steht nicht in der Liste,
     // ebenso die Person, für die gerade „Nein, jemand anderes“ gewählt wurde
     const taken = markedPeople(f.id);
     if (current?.id) taken.add(current.id);
-    const lst = pagedList(c, { scroll: true, getPage: () => state.facePage, setPage: (p) => { state.facePage = p; } });
+    const lst = pagedList(c, { scroll: true, pageKey: "facePage" });
     const draw = () => {
       endSearch.hidden = !state.faceQuery;
       const name = cleanName(state.faceQuery);
@@ -686,7 +720,6 @@ const SCREENS = {
         onClick: () => pick({ person_id: p.id }),
       })), lead, state.people.length ? "Niemand mit diesem Namen." : "In Immich sind noch keine Personen benannt.");
     };
-    input.addEventListener("input", () => { state.faceQuery = input.value; state.facePage = 0; draw(); });
     input.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
@@ -707,7 +740,7 @@ const SCREENS = {
       hint: "Alle antippen, die zu sehen sind.",
       next: () => goAfter("who"),
     });
-    if (!(await loadPeople(c, "who"))) return;
+    if (!(await loadList("people", "Personen", c, "who"))) return;
 
     const marked = markedPeople();
     const known = [
@@ -716,15 +749,11 @@ const SCREENS = {
     ];
     if (known.length) $("hint").replaceChildren("Schon erkannt: ", el("b", {}, known.join(", ")));
 
-    const filter = searchField("people-filter", state.peopleFilter, "Name eintippen …", "Name");
-    const endSearch = button("✕ Suche beenden", () => {
-      Object.assign(state, { peopleFilter: "", peoplePage: 0 });
-      filter.value = "";
-      draw();
-      filter.focus();
+    const { input: filter, endSearch } = searchBox({
+      id: "people-filter", queryKey: "peopleFilter", pageKey: "peoplePage", placeholder: "Name eintippen …", label: "Name", draw: () => draw(),
     });
     c.append(el("div", { class: "search-row" }, filter, endSearch));
-    const lst = pagedList(c, { scroll: true, getPage: () => state.peoplePage, setPage: (p) => { state.peoplePage = p; } });
+    const lst = pagedList(c, { scroll: true, pageKey: "peoplePage" });
     const addNew = (name) => {
       if (!name || a.new_people.some((n) => same(n, name))) return;
       a.new_people.push(name);
@@ -755,16 +784,10 @@ const SCREENS = {
       }));
       lst.fill([...fresh, ...people.map((p) => itemCell({
         name: p.name, pressed: a.person_ids.includes(p.id), lead: avatar(p), cls: "person",
-        onClick: () => {
-          const at = a.person_ids.indexOf(p.id);
-          if (at >= 0) a.person_ids.splice(at, 1); else a.person_ids.push(p.id);
-          saveDraft();
-          draw();
-        },
+        onClick: () => { toggleIn(a.person_ids, p.id); saveDraft(); draw(); },
       }))], lead, state.people.length ? "Niemand mit diesem Namen." : "In Immich sind noch keine Personen benannt.");
       updateNext();
     };
-    filter.addEventListener("input", () => { state.peopleFilter = filter.value; state.peoplePage = 0; draw(); });
     filter.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
@@ -790,20 +813,17 @@ const SCREENS = {
       skip: () => goAfter("tags"),
       next: () => goAfter("tags"),
     });
-    if (!(await loadTags(c, "tags"))) return;
+    if (!(await loadList("tags", "Themen", c, "tags"))) return;
 
     const chipBox = el("div");
-    const search = searchField("tag-search", state.tagQuery, "Thema suchen oder neu eintippen …", "Thema suchen oder neu eintippen");
     const crumbBox = el("div");
     // Suche beenden: zurück zur Übersicht aller Themen (oberste Ebene)
-    const endSearch = button("✕ Suche beenden", () => {
-      Object.assign(state, { tagQuery: "", tagPath: [], tagPage: 0 });
-      search.value = "";
-      draw();
-      search.focus();
+    const { input: search, endSearch } = searchBox({
+      id: "tag-search", queryKey: "tagQuery", pageKey: "tagPage", reset: { tagPath: [] }, draw: () => draw(),
+      placeholder: "Thema suchen oder neu eintippen …", label: "Thema suchen oder neu eintippen",
     });
     c.append(chipBox, el("div", { class: "search-row" }, search, endSearch), crumbBox);
-    const lst = pagedList(c, { scroll: true, getPage: () => state.tagPage, setPage: (p) => { state.tagPage = p; } });
+    const lst = pagedList(c, { scroll: true, pageKey: "tagPage" });
 
     const openFolder = (parts) => {
       state.tagPath = parts;
@@ -812,12 +832,7 @@ const SCREENS = {
       search.value = "";
       draw();
     };
-    const toggle = (value) => {
-      const at = a.tag_values.indexOf(value);
-      if (at >= 0) a.tag_values.splice(at, 1); else a.tag_values.push(value);
-      saveDraft();
-      draw();
-    };
+    const toggle = (value) => { toggleIn(a.tag_values, value); saveDraft(); draw(); };
 
     const draw = () => {
       const path = state.tagPath;
@@ -829,12 +844,10 @@ const SCREENS = {
       endSearch.hidden = !query;
       crumbBox.replaceChildren(...(!query && path.length ? [crumbs(path, openFolder)] : []));
 
-      // Ohne Suche: Themen der aktuellen Ebene. Mit Suche: Treffer aus allen Ebenen, Überthema darunter.
-      const prefix = path.length ? `${path.join("/")}/` : "";
-      const items = query
-        ? [...allTagValues()].filter((v) => contains(lastPart(v), query)).sort((x, y) => x.localeCompare(y, "de"))
-        : tagChildren(prefix).map((child) => prefix + child.name);
+      const tree = tagTree();
+      const items = tagItems(tree, path, query);
       const cells = items.map((value) => tagCell(value, {
+        tree,
         pressed: a.tag_values.includes(value),
         showParent: Boolean(query),
         onClick: () => toggle(value),
@@ -842,7 +855,7 @@ const SCREENS = {
       }));
       // Gesuchtes Thema gibt es noch nicht: als erster Eintrag „neu anlegen“, danach kommt die Frage nach dem Überthema
       const typed = cleanName(query.replace(/\//g, "-"));
-      const exists = [...allTagValues()].some((v) => same(lastPart(v), typed));
+      const exists = typed && [...allTagValues()].some((v) => same(lastPart(v), typed));
       const lead = typed && !exists
         ? [newCell(typed, items.length ? "Neues Thema – danach Überthema wählen" : "Kein Thema mit diesem Namen – neu anlegen?", () => {
           Object.assign(state, { newTagName: typed, ntPath: [...state.tagPath], ntQuery: "", ntPage: 0 });
@@ -854,7 +867,6 @@ const SCREENS = {
       buildSteps();
     };
 
-    search.addEventListener("input", () => { state.tagQuery = search.value; state.tagPage = 0; draw(); });
     search.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
@@ -875,7 +887,7 @@ const SCREENS = {
       question: `Wohin gehört „${name}“?`,
       hint: "Neues Thema. Überthema antippen – „›“ zeigt Unterthemen.", hintOptional: true,
     });
-    if (!(await loadTags(c, "newtag"))) return;
+    if (!(await loadList("tags", "Themen", c, "newtag"))) return;
 
     const create = (parent) => {
       const value = [...parent, name].join("/");
@@ -884,17 +896,14 @@ const SCREENS = {
       goBack();
     };
     const row = el("div", { class: "answers answers-row", role: "group", "aria-label": "Antwort" });
-    const search = searchField("newtag-search", state.ntQuery, "Oder Überthema suchen …", "Überthema suchen");
     const crumbBox = el("div");
     // Suche beenden: zurück zur Übersicht aller Themen (oberste Ebene)
-    const endSearch = button("✕ Suche beenden", () => {
-      Object.assign(state, { ntQuery: "", ntPath: [], ntPage: 0 });
-      search.value = "";
-      draw();
-      search.focus();
+    const { input: search, endSearch } = searchBox({
+      id: "newtag-search", queryKey: "ntQuery", pageKey: "ntPage", reset: { ntPath: [] }, draw: () => draw(),
+      placeholder: "Oder Überthema suchen …", label: "Überthema suchen",
     });
     c.append(row, el("div", { class: "search-row" }, search, endSearch), crumbBox);
-    const lst = pagedList(c, { scroll: true, getPage: () => state.ntPage, setPage: (p) => { state.ntPage = p; } });
+    const lst = pagedList(c, { scroll: true, pageKey: "ntPage" });
     const open = (parts) => {
       Object.assign(state, { ntPath: parts, ntQuery: "", ntPage: 0 });
       search.value = "";
@@ -910,19 +919,17 @@ const SCREENS = {
       ].filter(Boolean));
       endSearch.hidden = !query;
       crumbBox.replaceChildren(...(!query && path.length ? [crumbs(path, open)] : []));
-      const prefix = path.length ? `${path.join("/")}/` : "";
-      const items = query
-        ? [...allTagValues()].filter((v) => !isNewTag(v) && contains(lastPart(v), query)).sort((x, y) => x.localeCompare(y, "de"))
-        : tagChildren(prefix).map((child) => prefix + child.name);
+      const tree = tagTree();
+      // In der Suche keine noch ungespeicherten Themen als Überthema anbieten
+      const items = tagItems(tree, path, query).filter((v) => !query || !isNewTag(v));
       const cells = items.map((value) => tagCell(value, {
-        single: true, showParent: Boolean(query),
+        tree, single: true, showParent: Boolean(query),
         onClick: () => create(value.split("/")),
         onOpen: () => open(value.split("/")),
       }));
       lst.list.style.setProperty("--item-h", query ? "calc(var(--btn-h) + 8px)" : "var(--btn-h)");
       lst.fill(cells, [], query ? "Kein Thema mit diesem Namen." : "Hier gibt es keine Unterthemen.");
     };
-    search.addEventListener("input", () => { state.ntQuery = search.value; state.ntPage = 0; draw(); });
     search.addEventListener("keydown", (e) => { if (e.key === "Enter") e.preventDefault(); });
     draw();
   },
@@ -935,30 +942,16 @@ const SCREENS = {
       skip: () => goAfter("album"),
       next: () => goAfter("album"),
     });
-    if (state.albums === null) {
-      c.append(el("p", {}, "Alben werden geladen …"));
-      try {
-        state.albums = await api("/api/albums");
-      } catch (err) {
-        c.replaceChildren();
-        showError(err.message, () => render());
-        return;
-      }
-      if (state.screen !== "album") return;
-      c.replaceChildren();
-    }
+    if (!(await loadList("albums", "Alben", c, "album"))) return;
 
     const already = new Set(state.asset.albumIds);
     const chipBox = el("div");
-    const filter = searchField("album-filter", state.albumFilter, "Album suchen oder neu eintippen …", "Album suchen oder neu eintippen", "200");
-    const endSearch = button("✕ Suche beenden", () => {
-      Object.assign(state, { albumFilter: "", albumPage: 0 });
-      filter.value = "";
-      draw();
-      filter.focus();
+    const { input: filter, endSearch } = searchBox({
+      id: "album-filter", queryKey: "albumFilter", pageKey: "albumPage", maxlength: "200", draw: () => draw(),
+      placeholder: "Album suchen oder neu eintippen …", label: "Album suchen oder neu eintippen",
     });
     c.append(chipBox, el("div", { class: "search-row" }, filter, endSearch));
-    const lst = pagedList(c, { itemH: "calc(var(--btn-h) + 14px)", getPage: () => state.albumPage, setPage: (p) => { state.albumPage = p; } });
+    const lst = pagedList(c, { itemH: "calc(var(--btn-h) + 14px)", pageKey: "albumPage" });
     const addNew = (name) => {
       if (!name || a.new_albums.some((n) => same(n, name))) return;
       a.new_albums.push(name);
@@ -986,17 +979,11 @@ const SCREENS = {
           locked,
           pressed: a.album_ids.includes(al.id),
           title: locked ? "Das Foto ist schon in diesem Album" : null,
-          onClick: () => {
-            const at = a.album_ids.indexOf(al.id);
-            if (at >= 0) a.album_ids.splice(at, 1); else a.album_ids.push(al.id);
-            saveDraft();
-            draw();
-          },
+          onClick: () => { toggleIn(a.album_ids, al.id); saveDraft(); draw(); },
         });
       }), lead, state.albums.length ? (name ? "" : "Keine Alben.") : "In Immich gibt es noch keine Alben.");
       buildSteps();
     };
-    filter.addEventListener("input", () => { state.albumFilter = filter.value; state.albumPage = 0; draw(); });
     filter.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
       e.preventDefault();
@@ -1062,21 +1049,6 @@ const SCREENS = {
 
 // ---------- Themen ----------
 
-async function loadTags(c, screen) {
-  if (state.tags !== null) return true;
-  c.append(el("p", {}, "Themen werden geladen …"));
-  try {
-    state.tags = await api("/api/tags");
-  } catch (err) {
-    c.replaceChildren();
-    showError(err.message, () => render());
-    return false;
-  }
-  if (state.screen !== screen) return false;
-  c.replaceChildren();
-  return true;
-}
-
 // Alle bekannten Themen: aus Immich, schon am Bild, und neu angelegte (noch nicht gespeichert)
 function allTagValues() {
   return new Set([...(state.tags || []), ...state.asset.tagValues, ...state.answers.tag_values]);
@@ -1090,24 +1062,31 @@ function lastPart(value) {
   return value.split("/").pop();
 }
 
-// Direkte Unterthemen unter einem Pfad-Präfix, mit Anzahl ihrer eigenen Unterthemen
-function tagChildren(prefix) {
-  const names = new Map();
+// Themenbaum in einem Durchgang: Pfad -> Namen der direkten Unterthemen ("" ist die oberste Ebene)
+function tagTree() {
+  const tree = new Map();
   for (const value of allTagValues()) {
-    if (!value.startsWith(prefix)) continue;
-    const rest = value.slice(prefix.length).split("/");
-    if (!rest[0]) continue;
-    if (!names.has(rest[0])) names.set(rest[0], new Set());
-    if (rest.length > 1) names.get(rest[0]).add(rest[1]);
+    const parts = value.split("/");
+    for (let i = 0; i < parts.length && parts[i]; i++) {
+      const parent = parts.slice(0, i).join("/");
+      if (!tree.has(parent)) tree.set(parent, new Set());
+      tree.get(parent).add(parts[i]);
+    }
   }
-  return [...names.entries()]
-    .map(([name, kids]) => ({ name, count: kids.size }))
-    .sort((x, y) => x.name.localeCompare(y.name, "de"));
+  return tree;
+}
+
+// Ohne Suche: Themen der Ebene path. Mit Suche: Treffer aus allen Ebenen. Jeweils volle Pfade, sortiert.
+function tagItems(tree, path, query) {
+  if (query) return [...allTagValues()].filter((v) => contains(lastPart(v), query)).sort((x, y) => x.localeCompare(y, "de"));
+  const prefix = path.length ? `${path.join("/")}/` : "";
+  return [...(tree.get(path.join("/")) || [])].sort((x, y) => x.localeCompare(y, "de")).map((name) => prefix + name);
 }
 
 // Thema als Listeneintrag; hat es Unterthemen, hängt rechts ein Knopf „4 ›“ an derselben Karte
-function tagCell(value, { pressed = false, single = false, showParent = false, onClick, onOpen }) {
+function tagCell(value, { tree, pressed = false, single = false, showParent = false, onClick, onOpen }) {
   const parts = value.split("/");
+  const name = parts[parts.length - 1];
   const locked = !single && state.asset.tagValues.includes(value);
   const meta = [
     showParent && parts.length > 1 ? parts.slice(0, -1).join(" › ") : null,
@@ -1115,21 +1094,21 @@ function tagCell(value, { pressed = false, single = false, showParent = false, o
     isNewTag(value) ? tagLabel("neu", "new") : null,
   ].filter(Boolean);
   const cell = itemCell({
-    name: parts[parts.length - 1],
+    name,
     meta: meta.length ? meta.flatMap((m, i) => (i ? [" ", m] : [m])) : null,
     pressed: single ? null : pressed,
     locked,
     cls: single ? "single" : "",
-    title: value.split("/").join(" › "),
+    title: parts.join(" › "),
     onClick,
   });
-  const count = tagChildren(`${value}/`).length;
+  const count = tree.get(value)?.size || 0;
   if (count) {
     cell.classList.add("split");
     cell.append(el("button", {
       type: "button", class: "sub", onclick: onOpen,
-      "aria-label": `${count} Unterthemen von ${parts[parts.length - 1]} zeigen`,
-      title: `Unterthemen von ${parts[parts.length - 1]}`,
+      "aria-label": `${count} Unterthemen von ${name} zeigen`,
+      title: `Unterthemen von ${name}`,
     }, el("span", {}, String(count)), el("span", { class: "arr", "aria-hidden": "true" }, "›")));
   }
   return cell;
@@ -1171,33 +1150,17 @@ function facePerson(f) {
 }
 
 function markedPeople(exceptFaceId = null) {
+  const faces = askedFaces();
   const ids = new Set(state.asset.personIds);
-  for (const f of askedFaces()) {
-    // Gesicht wurde jemand anderem zugeordnet: die alte Person hängt dann (über dieses Gesicht) nicht mehr am Bild
-    if (f.personId && facePerson(f) !== f.personId && !askedFaces().some((g) => g !== f && facePerson(g) === f.personId)) ids.delete(f.personId);
-    if (f.id === exceptFaceId) {
-      if (f.personId && !askedFaces().some((g) => g !== f && facePerson(g) === f.personId)) ids.delete(f.personId);
-      continue;
-    }
-    const p = facePerson(f);
+  for (const f of faces) {
+    const skip = f.id === exceptFaceId;
+    // Gesicht ausgenommen oder jemand anderem zugeordnet: die alte Person hängt dann (über dieses Gesicht)
+    // nicht mehr am Bild – außer ein anderes Gesicht zeigt sie
+    if (f.personId && (skip || facePerson(f) !== f.personId) && !faces.some((g) => g !== f && facePerson(g) === f.personId)) ids.delete(f.personId);
+    const p = skip ? null : facePerson(f);
     if (p) ids.add(p);
   }
   return ids;
-}
-
-async function loadPeople(c, screen) {
-  if (state.people !== null) return true;
-  c.append(el("p", {}, "Personen werden geladen …"));
-  try {
-    state.people = await api("/api/people");
-  } catch (err) {
-    c.replaceChildren();
-    showError(err.message, () => render());
-    return false;
-  }
-  if (state.screen !== screen) return false;
-  c.replaceChildren();
-  return true;
 }
 
 // Ausschnitt aus dem Vorschaubild mit etwas Rand um das Gesicht
