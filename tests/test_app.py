@@ -22,6 +22,15 @@ def test_index_served():
         assert "Dia-Assistent" in c.get("/").text
 
 
+def test_index_busts_cache_of_css_and_js():
+    from dia_assistent import build_id
+
+    with make_client() as c:
+        page = c.get("/").text
+    assert f'"/static/app.css?v={build_id()}"' in page
+    assert f'"/static/app.js?v={build_id()}"' in page
+
+
 @respx.mock
 def test_queue_without_tag_gives_german_error():
     respx.get(f"{API}/tags").respond(json=[])

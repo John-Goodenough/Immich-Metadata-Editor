@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import FastAPI, Request
 from fastapi import Path as PathParam
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -98,9 +98,15 @@ def create_app(
             state["work_tag_id"] = tag_id
         return state["work_tag_id"]
 
+    # Prüfsumme an CSS/JS anhängen: Nach einem Update holt der Browser die neuen Dateien,
+    # statt die alten aus dem Zwischenspeicher zu nehmen
+    page = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for asset in ("/static/app.css", "/static/app.js"):
+        page = page.replace(f'"{asset}"', f'"{asset}?v={build}"')
+
     @app.get("/")
     async def index():
-        return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-store"})
+        return HTMLResponse(page, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/settings")
     async def settings():
